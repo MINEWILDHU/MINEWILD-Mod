@@ -1,0 +1,96 @@
+plugins {
+    id 'fabric-loom' version '1.15-SNAPSHOT'
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+loom {
+    splitEnvironmentSourceSets()
+
+    mods {
+        "minewild" {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+repositories {
+    // Itt adhatsz meg további tárolókat a csomagok letöltéséhez.
+    // Ezt általában csak akkor érdemes használni, ha más modokra is függsz, mert
+    // a Loom automatikusan hozzáadja a Minecraft és a könyvtárak letöltéséhez szükséges Maven-tárolókat.
+    // További információ: https://docs.gradle.org/current/userguide/declaring_repositories.html
+}
+
+dependencies {
+    // A verziókat a gradle.properties fájlban tudod módosítani.
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "minecraft_version_range", project.minecraft_version_range
+    inputs.property "loader_version", project.loader_version
+    filteringCharset "UTF-8"
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version,
+                "minecraft_version_range": project.minecraft_version_range,
+                "loader_version": project.loader_version
+    }
+}
+
+def targetJavaVersion = 17
+tasks.withType(JavaCompile).configureEach {
+    // A karakterkódolás legyen mindig UTF-8, függetlenül a rendszer alapértelmezésétől.
+    // Ez javít néhány speciális esetet, amikor a különleges karakterek hibásan jelennek meg.
+    // Részletek: http://yodaconditions.net/blog/fix-for-java-file-encoding-problems-with-gradle.html
+    // Ha Javadoc is készül, ott is meg kell adni ezt.
+    it.options.encoding = "UTF-8"
+    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+        it.options.release.set(targetJavaVersion)
+    }
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+    // A Loom automatikusan hozzárendeli a sourcesJar-t a RemapSourcesJar feladathoz és a "build" feladathoz,
+    // ha jelen van.
+    // Ha ezt a sort törlöd, a forrás JAR nem készül el.
+    withSourcesJar()
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.archives_base_name}" }
+    }
+}
+
+// Maven publikálás beállítása
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = project.archives_base_name
+            from components.java
+        }
+    }
+
+    // Publikálási beállítások: https://docs.gradle.org/current/userguide/publishing_maven.html
+    repositories {
+        // Itt adhatsz meg publikálási tárolókat.
+        // Fontos: ez a blokk nem ugyanazt a célt szolgálja, mint a felső szintű repositories blokk.
+        // Az itt megadott tárolók a saját csomag közzétételéhez kellenek,
+        // nem a függőségek letöltéséhez.
+    }
+}

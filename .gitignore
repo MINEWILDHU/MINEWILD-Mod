@@ -1,0 +1,12 @@
+# Gradle and build outputs
+.gradle/
+build/
+out/
+
+# Local editor settings
+.vscode/
+.idea/
+*.iml
+
+# Local runtime data
+run/

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "minewild",
+  "version": "${version}",
+  "name": "MINEWILD",
+  "description": "",
+  "authors": [],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "icon": "assets/minewild/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "hu.ColorsASD.minewild.client.MinewildClient"
+    ]
+  },
+  "mixins": [
+    {
+      "config": "minewild.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "${minecraft_version_range}"
+  }
+}
