@@ -2,6 +2,7 @@ package hu.ColorsASD.minewild.client;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.GameOptions;
+import net.minecraft.client.option.SimpleOption;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.network.ServerAddress;
@@ -57,6 +58,7 @@ public final class ClientCompat {
     private static final String ONBOARD_ACCESSIBILITY_FIELD_INTERMEDIARY = "field_41785";
     private static final String SKIP_MULTIPLAYER_WARNING_FIELD = "skipMultiplayerWarning";
     private static final String SKIP_MULTIPLAYER_WARNING_FIELD_INTERMEDIARY = "field_21840";
+    private static final String TUTORIAL_STEP_FIELD = "tutorialStep";
     private static final String COOKIE_STORAGE_CLASS = "net.minecraft.client.network.CookieStorage";
     private static final String RENDER_LAYER_CLASS = "net.minecraft.class_1921";
     private static final int COLOR_WHITE = 0xFFFFFFFF;
@@ -138,6 +140,8 @@ public final class ClientCompat {
     private static boolean onboardAccessibilityFieldChecked;
     private static Field skipMultiplayerWarningField;
     private static boolean skipMultiplayerWarningFieldChecked;
+    private static Field tutorialStepField;
+    private static boolean tutorialStepFieldChecked;
     private static Method currentServerEntryMethod;
     private static boolean currentServerEntryMethodChecked;
     private static Field serverInfoAddressField;
@@ -231,6 +235,37 @@ public final class ClientCompat {
         return setGameOptionsBoolean(getSkipMultiplayerWarningField(), options, enabled);
     }
 
+    public static boolean setTutorialStepNone(GameOptions options) {
+        if (options == null) {
+            return false;
+        }
+        Field field = getTutorialStepField(options);
+        if (field == null) {
+            return false;
+        }
+        try {
+            if (field.getType().isEnum()) {
+                Object noneValue = findEnumConstant(field.getType().getEnumConstants(), "NONE");
+                if (noneValue == null) {
+                    return false;
+                }
+                Object current = field.get(options);
+                if (noneValue.equals(current)) {
+                    return false;
+                }
+                field.set(options, noneValue);
+                return true;
+            }
+
+            Object value = field.get(options);
+            if (value instanceof SimpleOption<?> option) {
+                return setSimpleOptionEnumToNone(option);
+            }
+        } catch (IllegalAccessException | RuntimeException ignored) {
+        }
+        return false;
+    }
+
     public static String tryGetCurrentServerAddress(MinecraftClient client) {
         ServerInfo info = tryGetCurrentServerInfo(client);
         if (info == null) {
@@ -309,6 +344,15 @@ public final class ClientCompat {
         return skipMultiplayerWarningField;
     }
 
+    private static Field getTutorialStepField(GameOptions options) {
+        if (tutorialStepFieldChecked) {
+            return tutorialStepField;
+        }
+        tutorialStepFieldChecked = true;
+        tutorialStepField = findTutorialStepField(options);
+        return tutorialStepField;
+    }
+
     private static Field findGameOptionsBooleanField(String... names) {
         if (names == null || names.length == 0) {
             return null;
@@ -339,6 +383,163 @@ public final class ClientCompat {
             current = current.getSuperclass();
         }
         return null;
+    }
+
+    private static Field findTutorialStepField(GameOptions options) {
+        Field named = findDeclaredField(GameOptions.class, TUTORIAL_STEP_FIELD);
+        if (named != null && looksLikeTutorialField(named, options)) {
+            return named;
+        }
+
+        Field best = null;
+        int bestScore = -1;
+        Class<?> current = GameOptions.class;
+        while (current != null && current != Object.class) {
+            for (Field field : current.getDeclaredFields()) {
+                int score = scoreTutorialField(field, options);
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = field;
+                }
+            }
+            current = current.getSuperclass();
+        }
+        return bestScore >= 3 ? best : null;
+    }
+
+    private static int scoreTutorialField(Field field, GameOptions options) {
+        if (field == null) {
+            return -1;
+        }
+        boolean accessible = trySetAccessible(field);
+        if (!accessible) {
+            return -1;
+        }
+
+        int score = 0;
+        String fieldName = field.getName().toLowerCase(Locale.ROOT);
+        if (fieldName.contains("tutorial")) {
+            score += 4;
+        }
+
+        Class<?> type = field.getType();
+        if (type.isEnum()) {
+            int enumScore = scoreTutorialEnum(type);
+            if (enumScore < 0) {
+                return -1;
+            }
+            return score + enumScore;
+        }
+
+        if (!SimpleOption.class.isAssignableFrom(type) || options == null) {
+            return -1;
+        }
+
+        try {
+            Object value = field.get(options);
+            if (!(value instanceof SimpleOption<?> option)) {
+                return -1;
+            }
+            Object current = option.getValue();
+            if (!(current instanceof Enum<?> currentEnum)) {
+                return -1;
+            }
+            int enumScore = scoreTutorialEnum(currentEnum.getClass());
+            if (enumScore < 0) {
+                return -1;
+            }
+            return score + enumScore + 2;
+        } catch (IllegalAccessException | RuntimeException ignored) {
+            return -1;
+        }
+    }
+
+    private static int scoreTutorialEnum(Class<?> enumType) {
+        if (enumType == null || !enumType.isEnum()) {
+            return -1;
+        }
+        Object[] values = enumType.getEnumConstants();
+        if (values == null || values.length == 0) {
+            return -1;
+        }
+        if (findEnumConstant(values, "NONE") == null) {
+            return -1;
+        }
+
+        int score = 1;
+        String typeName = enumType.getSimpleName().toLowerCase(Locale.ROOT);
+        if (typeName.contains("tutorial")) {
+            score += 4;
+        }
+        if (findEnumConstant(values, "MOVEMENT") != null) {
+            score += 3;
+        }
+        if (findEnumConstant(values, "OPEN_INVENTORY") != null) {
+            score += 2;
+        }
+        if (findEnumConstant(values, "CRAFT_PLANKS") != null) {
+            score += 1;
+        }
+        return score;
+    }
+
+    private static boolean looksLikeTutorialField(Field field, GameOptions options) {
+        return scoreTutorialField(field, options) >= 3;
+    }
+
+    private static Field findDeclaredField(Class<?> owner, String name) {
+        if (owner == null || name == null || name.isBlank()) {
+            return null;
+        }
+        Class<?> current = owner;
+        while (current != null && current != Object.class) {
+            try {
+                Field field = current.getDeclaredField(name);
+                if (trySetAccessible(field)) {
+                    return field;
+                }
+            } catch (NoSuchFieldException | RuntimeException ignored) {
+            }
+            current = current.getSuperclass();
+        }
+        return null;
+    }
+
+    private static boolean trySetAccessible(Field field) {
+        if (field == null) {
+            return false;
+        }
+        try {
+            field.setAccessible(true);
+            return true;
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private static boolean setSimpleOptionEnumToNone(SimpleOption<?> option) {
+        if (option == null) {
+            return false;
+        }
+        Object current = option.getValue();
+        if (!(current instanceof Enum<?> currentEnum)) {
+            return false;
+        }
+        Object noneValue = findEnumConstant(currentEnum.getClass().getEnumConstants(), "NONE");
+        if (noneValue == null || noneValue.equals(currentEnum)) {
+            return false;
+        }
+        return setSimpleOptionValue(option, noneValue);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static boolean setSimpleOptionValue(SimpleOption<?> option, Object value) {
+        try {
+            ((SimpleOption) option).setValue(value);
+            return true;
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 
     private static Method getCurrentServerEntryMethod() {

@@ -27,6 +27,9 @@ public class AccessibilityOnboardingScreenMixin {
         if (ClientCompat.setSkipMultiplayerWarning(options, true)) {
             changed = true;
         }
+        if (ClientCompat.setTutorialStepNone(options)) {
+            changed = true;
+        }
         if (changed) {
             options.write();
         }

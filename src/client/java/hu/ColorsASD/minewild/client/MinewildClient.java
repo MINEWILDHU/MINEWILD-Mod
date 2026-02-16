@@ -50,15 +50,26 @@ public class MinewildClient implements ClientModInitializer {
         if (ClientCompat.setSkipMultiplayerWarning(options, true)) {
             changed = true;
         }
+        if (ClientCompat.setTutorialStepNone(options)) {
+            changed = true;
+        }
         if (changed) {
             options.write();
         }
     }
 
     private void scheduleBaseSettings() {
+        MinecraftClient immediateClient = MinecraftClient.getInstance();
+        if (immediateClient != null && immediateClient.options != null) {
+            immediateClient.execute(() -> {
+                applyBaseSettings(immediateClient);
+                scheduleGuiScaleRetry(immediateClient);
+            });
+            return;
+        }
+
         Thread worker = new Thread(() -> {
-            long start = System.currentTimeMillis();
-            while (System.currentTimeMillis() - start < 10_000) {
+            while (true) {
                 MinecraftClient client = MinecraftClient.getInstance();
                 if (client != null && client.options != null) {
                     client.execute(() -> {
@@ -99,6 +110,9 @@ public class MinewildClient implements ClientModInitializer {
             changed = true;
         }
         if (ClientCompat.setSkipMultiplayerWarning(options, true)) {
+            changed = true;
+        }
+        if (ClientCompat.setTutorialStepNone(options)) {
             changed = true;
         }
 

@@ -9,95 +9,79 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
 import net.minecraft.text.TextContent;
 import net.minecraft.text.TranslatableTextContent;
+import net.minecraft.util.Util;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyArgs;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+
+import java.net.URI;
 
 @Mixin(DisconnectedScreen.class)
 public abstract class DisconnectedScreenMixin extends Screen {
     private static final String MINEWILD_ADDRESS = "play.minewild.hu";
     private static final String MINEWILD_NAME = "MINEWILD";
+    private static final String SUPPORT_URL = "https://www.minewild.hu/support/";
     private static final String KEY_TO_MENU = "gui.toMenu";
     private static final String KEY_TO_TITLE = "gui.toTitle";
+    private static final Text SUPPORT_LABEL = Text.literal("Segítségkérés");
     private static final Text RECONNECT_LABEL = Text.literal("Újracsatlakozás");
     private static final Text EXIT_LABEL = Text.literal("Kilépés");
-    private boolean minewild$reconnectReady;
+    private static final int BUTTON_SPACING = 4;
 
     protected DisconnectedScreenMixin(Text title) {
         super(title);
     }
 
-    @ModifyArgs(
-            method = "init",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/client/gui/widget/ButtonWidget;builder(Lnet/minecraft/text/Text;Lnet/minecraft/client/gui/widget/ButtonWidget$PressAction;)Lnet/minecraft/client/gui/widget/ButtonWidget$Builder;"
-            ),
-            require = 0
-    )
-    private void minewild$replaceMenuButton(Args args) {
-        Text label = args.get(0);
-        if (!isMenuButton(label)) {
-            return;
-        }
-        args.set(0, RECONNECT_LABEL);
-        args.set(1, (ButtonWidget.PressAction) button -> connectToMinewild());
-        minewild$reconnectReady = true;
-    }
-
     @Inject(method = "init", at = @At("TAIL"))
-    private void minewild$addExitButton(CallbackInfo ci) {
-        ensureReconnectButton();
-        for (Element element : this.children()) {
-            if (element instanceof ButtonWidget button
-                    && EXIT_LABEL.getString().equals(button.getMessage().getString())) {
-                return;
-            }
-        }
-        int buttonWidth = 200;
-        int buttonHeight = 20;
-        int x = (this.width - buttonWidth) / 2;
-        int y = findExitButtonY();
-        ButtonWidget exitButton = ButtonWidget.builder(EXIT_LABEL, button -> MinecraftClient.getInstance().scheduleStop())
-                .dimensions(x, y, buttonWidth, buttonHeight)
-                .build();
-        this.addDrawableChild(exitButton);
-    }
-
-    private void ensureReconnectButton() {
-        if (minewild$reconnectReady) {
-            return;
-        }
-        if (hasReconnectButton()) {
-            minewild$reconnectReady = true;
-            return;
-        }
+    private void minewild$layoutMinewildButtons(CallbackInfo ci) {
         ButtonWidget menuButton = findMenuButton();
         if (menuButton == null) {
             return;
         }
-        ButtonWidget.PressAction action = button -> connectToMinewild();
-        if (updateButtonAction(menuButton, action)) {
-            minewild$reconnectReady = true;
-            return;
-        }
-        replaceMenuButton(menuButton, action);
-        minewild$reconnectReady = true;
-    }
 
-    private boolean hasReconnectButton() {
-        for (Element element : this.children()) {
-            if (element instanceof ButtonWidget button
-                    && RECONNECT_LABEL.getString().equals(button.getMessage().getString())) {
-                return true;
-            }
+        int fullWidth = menuButton.getWidth();
+        int height = menuButton.getHeight();
+        int x = menuButton.getX();
+        int y = menuButton.getY();
+        int smallWidth = (fullWidth - BUTTON_SPACING) / 2;
+        int topRowY = y;
+        int bottomRowY = y + height + BUTTON_SPACING;
+        int rightX = x + smallWidth + BUTTON_SPACING;
+
+        // Elrejtjük az eredeti "Vissza a menübe/címképernyőre" gombot.
+        menuButton.visible = false;
+        menuButton.active = false;
+
+        ButtonWidget supportButton = findButtonByLabel(SUPPORT_LABEL);
+        if (supportButton == null) {
+            supportButton = ButtonWidget.builder(SUPPORT_LABEL, button -> openSupportPage())
+                    .dimensions(x, topRowY, fullWidth, height)
+                    .build();
+            this.addDrawableChild(supportButton);
+        } else {
+            placeButton(supportButton, x, topRowY, fullWidth);
         }
-        return false;
+
+        ButtonWidget reconnectButton = findButtonByLabel(RECONNECT_LABEL);
+        if (reconnectButton == null) {
+            reconnectButton = ButtonWidget.builder(RECONNECT_LABEL, button -> connectToMinewild())
+                    .dimensions(x, bottomRowY, smallWidth, height)
+                    .build();
+            this.addDrawableChild(reconnectButton);
+        } else {
+            placeButton(reconnectButton, x, bottomRowY, smallWidth);
+        }
+
+        ButtonWidget exitButton = findButtonByLabel(EXIT_LABEL);
+        if (exitButton == null) {
+            exitButton = ButtonWidget.builder(EXIT_LABEL, button -> MinecraftClient.getInstance().scheduleStop())
+                    .dimensions(rightX, bottomRowY, smallWidth, height)
+                    .build();
+            this.addDrawableChild(exitButton);
+        } else {
+            placeButton(exitButton, rightX, bottomRowY, smallWidth);
+        }
     }
 
     private ButtonWidget findMenuButton() {
@@ -109,147 +93,29 @@ public abstract class DisconnectedScreenMixin extends Screen {
         return null;
     }
 
-    private boolean updateButtonAction(ButtonWidget button, ButtonWidget.PressAction action) {
-        if (button == null) {
-            return false;
-        }
-        if (!setPressAction(button, action)) {
-            return false;
-        }
-        button.setMessage(RECONNECT_LABEL);
-        return true;
-    }
-
-    private void replaceMenuButton(ButtonWidget menuButton, ButtonWidget.PressAction action) {
-        int defaultWidth = 200;
-        int defaultHeight = 20;
-        int x = readWidgetInt(menuButton, "getX", "x", (this.width - defaultWidth) / 2);
-        int y = readWidgetInt(menuButton, "getY", "y", this.height / 2 - 10);
-        int width = readWidgetInt(menuButton, "getWidth", "width", defaultWidth);
-        int height = readWidgetInt(menuButton, "getHeight", "height", defaultHeight);
-        disableWidget(menuButton);
-        ButtonWidget reconnectButton = ButtonWidget.builder(RECONNECT_LABEL, action)
-                .dimensions(x, y, width, height)
-                .build();
-        this.addDrawableChild(reconnectButton);
-    }
-
-    private static int readWidgetInt(Object target, String methodName, String fieldName, int fallback) {
-        Integer value = callIntMethod(target, methodName);
-        if (value != null) {
-            return value;
-        }
-        value = readIntField(target, fieldName);
-        return value != null ? value : fallback;
-    }
-
-    private static Integer callIntMethod(Object target, String name) {
-        if (target == null || name == null || name.isBlank()) {
-            return null;
-        }
-        try {
-            Method method = target.getClass().getMethod(name);
-            if (method.getReturnType() != int.class || method.getParameterCount() != 0) {
-                return null;
+    private ButtonWidget findButtonByLabel(Text label) {
+        String expected = label.getString();
+        for (Element element : this.children()) {
+            if (!(element instanceof ButtonWidget button)) {
+                continue;
             }
-            return (Integer) method.invoke(target);
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
-            return null;
+            String actual = button.getMessage() == null ? "" : button.getMessage().getString();
+            if (expected.equals(actual)) {
+                return button;
+            }
         }
+        return null;
     }
 
-    private static Integer readIntField(Object target, String name) {
-        Field field = findField(target, name, int.class);
-        if (field == null) {
-            return null;
-        }
-        try {
-            return field.getInt(target);
-        } catch (IllegalAccessException | RuntimeException ignored) {
-            return null;
-        }
-    }
-
-    private static void disableWidget(ButtonWidget button) {
-        setBooleanField(button, "active", false);
-        setBooleanField(button, "visible", false);
-    }
-
-    private static void setBooleanField(Object target, String name, boolean value) {
-        Field field = findField(target, name, boolean.class);
-        if (field == null) {
+    private static void placeButton(ButtonWidget button, int x, int y, int width) {
+        if (button == null) {
             return;
         }
-        try {
-            field.setBoolean(target, value);
-        } catch (IllegalAccessException | RuntimeException ignored) {
+        button.setX(x);
+        button.setY(y);
+        if (button.getWidth() != width) {
+            button.setWidth(width);
         }
-    }
-
-    private static Field findField(Object target, String name, Class<?> type) {
-        if (target == null || name == null || name.isBlank()) {
-            return null;
-        }
-        Class<?> current = target.getClass();
-        while (current != null && current != Object.class) {
-            try {
-                Field field = current.getDeclaredField(name);
-                if (type == null || type.isAssignableFrom(field.getType())) {
-                    field.setAccessible(true);
-                    return field;
-                }
-            } catch (NoSuchFieldException | RuntimeException ignored) {
-            }
-            current = current.getSuperclass();
-        }
-        return null;
-    }
-
-    private static boolean setPressAction(ButtonWidget button, ButtonWidget.PressAction action) {
-        if (button == null || action == null) {
-            return false;
-        }
-        Field field = findPressActionField(button.getClass());
-        if (field == null) {
-            return false;
-        }
-        try {
-            field.set(button, action);
-            return true;
-        } catch (IllegalAccessException | RuntimeException ignored) {
-            return false;
-        }
-    }
-
-    private static Field findPressActionField(Class<?> type) {
-        Class<?> current = type;
-        while (current != null && current != Object.class) {
-            for (Field field : current.getDeclaredFields()) {
-                if (ButtonWidget.PressAction.class.isAssignableFrom(field.getType())) {
-                    try {
-                        field.setAccessible(true);
-                    } catch (RuntimeException ignored) {
-                    }
-                    return field;
-                }
-            }
-            current = current.getSuperclass();
-        }
-        return null;
-    }
-
-    private int findExitButtonY() {
-        for (Element element : this.children()) {
-            if (element instanceof ButtonWidget button
-                    && RECONNECT_LABEL.getString().equals(button.getMessage().getString())) {
-                return button.getY() + 24;
-            }
-        }
-        return this.height / 2 + 32;
-    }
-
-    private void connectToMinewild() {
-        ClientCompat.connectToServer(this, MinecraftClient.getInstance(), MINEWILD_NAME, MINEWILD_ADDRESS);
     }
 
     private static boolean isMenuButton(Text text) {
@@ -261,6 +127,28 @@ public abstract class DisconnectedScreenMixin extends Screen {
             String key = translatable.getKey();
             return KEY_TO_MENU.equals(key) || KEY_TO_TITLE.equals(key);
         }
-        return false;
+        String label = text.getString();
+        if (label == null || label.isBlank()) {
+            return false;
+        }
+        if (label.equals(Text.translatable(KEY_TO_MENU).getString())) {
+            return true;
+        }
+        return label.equals(Text.translatable(KEY_TO_TITLE).getString());
+    }
+
+    private static void openSupportPage() {
+        try {
+            Util.getOperatingSystem().open(URI.create(SUPPORT_URL));
+        } catch (Exception ignored) {
+            try {
+                Util.getOperatingSystem().open(SUPPORT_URL);
+            } catch (Exception ignoredAgain) {
+            }
+        }
+    }
+
+    private void connectToMinewild() {
+        ClientCompat.connectToServer(this, MinecraftClient.getInstance(), MINEWILD_NAME, MINEWILD_ADDRESS);
     }
 }

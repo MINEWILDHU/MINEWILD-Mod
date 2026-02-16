@@ -2,6 +2,7 @@ package hu.ColorsASD.minewild.mixin.client;
 
 import hu.ColorsASD.minewild.client.ClientCompat;
 import hu.ColorsASD.minewild.client.ClientExitOnDisconnect;
+import hu.ColorsASD.minewild.client.ClientPauseMenuLinks;
 import hu.ColorsASD.minewild.client.RestartRequiredScreen;
 import hu.ColorsASD.minewild.client.ShaderPreferenceScreen;
 import hu.ColorsASD.minewild.client.ResourcePackAutoAccept;
@@ -34,5 +35,6 @@ public class ScreenBlurMixin {
         Screen screen = (Screen) (Object) this;
         ResourcePackAutoAccept.handleScreenInit(screen);
         ClientExitOnDisconnect.handleScreenInit(screen);
+        ClientPauseMenuLinks.handleScreenInit(screen);
     }
 }

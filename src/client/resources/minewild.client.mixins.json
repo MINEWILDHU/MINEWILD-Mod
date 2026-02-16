@@ -5,10 +5,12 @@
   "compatibilityLevel": "JAVA_17",
   "client": [
     "AccessibilityOnboardingScreenMixin",
+    "ButtonWidgetMixin",
     "ClientBrandRetrieverMixin",
     "DisconnectedScreenMixin",
     "GameMenuScreenMixin",
     "MinecraftClientMixin",
+    "ScreenInvokerMixin",
     "ScreenBlurMixin",
     "TitleScreenMixin"
   ],
