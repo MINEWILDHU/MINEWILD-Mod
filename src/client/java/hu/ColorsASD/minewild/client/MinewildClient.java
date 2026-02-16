@@ -4,6 +4,7 @@ import net.fabricmc.api.ClientModInitializer;
 import hu.ColorsASD.minewild.installer.ModInstaller;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.GameOptions;
+import net.minecraft.client.option.ParticlesMode;
 import net.minecraft.client.option.SimpleOption;
 import net.minecraft.client.util.Window;
 import net.minecraft.sound.SoundCategory;
@@ -18,8 +19,15 @@ public class MinewildClient implements ClientModInitializer {
     private static final int GUI_SCALE_FALLBACK_WINDOW_HEIGHT = 720;
     private static final int VIEW_DISTANCE = 6;
     private static final int SIMULATION_DISTANCE = 5;
+    private static final double GAMMA = 0.0;
+    private static final boolean VSYNC_ENABLED = false;
+    private static final ParticlesMode PARTICLES_MODE = ParticlesMode.DECREASED;
+    private static final int BIOME_BLEND_RADIUS = 1;
+    private static final int MIPMAP_LEVELS = 0;
     private static final int GUI_SCALE_RETRY_MS = 2000;
     private static final int FPS_UNLIMITED_FALLBACK = 260;
+    private static final String SODIUM_OPTIONS_CLASS_NAME =
+            "me.jellysquid.mods.sodium.client.gui.SodiumGameOptions";
     private static Integer cachedUnlimitedFps;
 
     @Override
@@ -128,6 +136,40 @@ public class MinewildClient implements ClientModInitializer {
             changed = true;
         }
 
+        SimpleOption<Double> gamma = options.getGamma();
+        if (gamma.getValue() != GAMMA) {
+            gamma.setValue(GAMMA);
+            changed = true;
+        }
+
+        SimpleOption<Boolean> enableVsync = options.getEnableVsync();
+        if (enableVsync.getValue() != VSYNC_ENABLED) {
+            enableVsync.setValue(VSYNC_ENABLED);
+            changed = true;
+        }
+
+        SimpleOption<ParticlesMode> particles = options.getParticles();
+        if (particles.getValue() != PARTICLES_MODE) {
+            particles.setValue(PARTICLES_MODE);
+            changed = true;
+        }
+
+        SimpleOption<Integer> biomeBlendRadius = options.getBiomeBlendRadius();
+        if (biomeBlendRadius.getValue() != BIOME_BLEND_RADIUS) {
+            biomeBlendRadius.setValue(BIOME_BLEND_RADIUS);
+            changed = true;
+        }
+
+        SimpleOption<Integer> mipmapLevels = options.getMipmapLevels();
+        if (mipmapLevels.getValue() != MIPMAP_LEVELS) {
+            mipmapLevels.setValue(MIPMAP_LEVELS);
+            changed = true;
+        }
+
+        if (applySodiumQualityDefaults()) {
+            changed = true;
+        }
+
         if (resolutionChanged) {
             client.onResolutionChanged();
         }
@@ -232,5 +274,59 @@ public class MinewildClient implements ClientModInitializer {
         }
         cachedUnlimitedFps = value;
         return value;
+    }
+
+    private boolean applySodiumQualityDefaults() {
+        try {
+            Class<?> sodiumOptionsClass = Class.forName(SODIUM_OPTIONS_CLASS_NAME);
+            Object sodiumOptions = sodiumOptionsClass.getMethod("loadFromDisk").invoke(null);
+            if (sodiumOptions == null) {
+                return false;
+            }
+
+            Field qualityField = sodiumOptionsClass.getField("quality");
+            Object qualitySettings = qualityField.get(sodiumOptions);
+            if (qualitySettings == null) {
+                return false;
+            }
+
+            boolean changed = false;
+
+            Field weatherQuality = qualitySettings.getClass().getField("weatherQuality");
+            if (setEnumField(weatherQuality, qualitySettings, "FAST")) {
+                changed = true;
+            }
+
+            Field vignette = qualitySettings.getClass().getField("enableVignette");
+            boolean vignetteEnabled = vignette.getBoolean(qualitySettings);
+            if (vignetteEnabled) {
+                vignette.setBoolean(qualitySettings, false);
+                changed = true;
+            }
+
+            if (changed) {
+                sodiumOptionsClass.getMethod("writeToDisk", sodiumOptionsClass).invoke(null, sodiumOptions);
+            }
+            return changed;
+        } catch (ClassNotFoundException ignored) {
+            return false;
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static boolean setEnumField(Field field, Object target, String enumName) throws IllegalAccessException {
+        Class<?> enumType = field.getType();
+        if (!Enum.class.isAssignableFrom(enumType)) {
+            return false;
+        }
+        Enum desired = Enum.valueOf((Class<? extends Enum>) enumType.asSubclass(Enum.class), enumName);
+        Object current = field.get(target);
+        if (desired.equals(current)) {
+            return false;
+        }
+        field.set(target, desired);
+        return true;
     }
 }
