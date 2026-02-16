@@ -24,8 +24,27 @@ public class MinewildClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        applyAccessibilityDefaultsImmediately();
         ModInstaller.beginInstallIfNeeded();
         scheduleBaseSettings();
+    }
+
+    private void applyAccessibilityDefaultsImmediately() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null || client.options == null) {
+            return;
+        }
+        GameOptions options = client.options;
+        boolean changed = false;
+        if (ClientCompat.setOnboardAccessibility(options, true)) {
+            changed = true;
+        }
+        if (ClientCompat.setSkipMultiplayerWarning(options, true)) {
+            changed = true;
+        }
+        if (changed) {
+            options.write();
+        }
     }
 
     private void scheduleBaseSettings() {

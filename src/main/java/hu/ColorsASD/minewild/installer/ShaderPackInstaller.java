@@ -54,6 +54,8 @@ public final class ShaderPackInstaller {
     private static final String IRIS_PROPERTIES = "iris.properties";
     private static final String IRIS_SHADER_PACK_KEY = "shaderPack";
     private static final String IRIS_ENABLE_SHADERS_KEY = "enableShaders";
+    private static final String SHADER_CHOICE_PROPERTIES = "minewild-shader.properties";
+    private static final String SHADER_CHOICE_KEY = "enabled";
     private static final String SHADER_FILENAME_PREFIX = "complementaryunbound";
     private static final String EUPHORIA_SHADER_NAME_TOKEN = "euphoriapatches";
     private static final String EUPHORIA_PATCH_SUFFIX = " + EuphoriaPatches_1.8.6";
@@ -63,11 +65,36 @@ public final class ShaderPackInstaller {
     private static final long PATCHED_SHADER_POLL_MS = 1_000L;
     private static final long FOLLOW_UP_WATCH_MS = 30L * 60L * 1000L;
     private static final long FOLLOW_UP_POLL_MS = 2_000L;
+    private static final Object SHADER_CHOICE_LOCK = new Object();
+    private static volatile boolean shaderChoiceLoaded = false;
+    private static volatile Boolean cachedShaderEnabledChoice = null;
 
     private ShaderPackInstaller() {
     }
 
     public static void beginInstallIfNeeded() {
+        Boolean shaderEnabledChoice = getShaderEnabledChoice();
+        if (Boolean.FALSE.equals(shaderEnabledChoice)) {
+            applyIrisDisabledSettings();
+        }
+        startInstallWorker();
+    }
+
+    public static boolean hasUserPreference() {
+        return getShaderEnabledChoice() != null;
+    }
+
+    public static void applyUserPreference(boolean enabled) {
+        storeShaderEnabledChoice(enabled);
+        startInstallWorker();
+        if (enabled) {
+            applyPreferredInstalledShaderSettings();
+            return;
+        }
+        applyIrisDisabledSettings();
+    }
+
+    private static void startInstallWorker() {
         if (!STARTED.compareAndSet(false, true)) {
             return;
         }
@@ -90,13 +117,13 @@ public final class ShaderPackInstaller {
         if (lookup == null || lookup.version == null) {
             Optional<String> existingPatched = findExistingEuphoriaShaderPack(shaderpacksDir);
             if (existingPatched.isPresent()) {
-                applyIrisSettingsAndProfileDefaults(shaderpacksDir, existingPatched.get());
+                applyPreferenceForShaderPack(shaderpacksDir, existingPatched.get());
                 startFollowUpWatch(shaderpacksDir, existingPatched.get());
                 return;
             }
             Optional<String> existing = findExistingShaderPack(shaderpacksDir);
             if (existing.isPresent()) {
-                applyIrisSettings(existing.get());
+                applyPreferenceForShaderPack(shaderpacksDir, existing.get());
                 startFollowUpWatch(shaderpacksDir, existing.get());
                 return;
             }
@@ -122,7 +149,7 @@ public final class ShaderPackInstaller {
         }
 
         String preferredShaderPack = waitForPreferredShaderPack(shaderpacksDir, file.filename);
-        applyIrisSettingsAndProfileDefaults(shaderpacksDir, preferredShaderPack);
+        applyPreferenceForShaderPack(shaderpacksDir, preferredShaderPack);
         startFollowUpWatch(shaderpacksDir, preferredShaderPack);
     }
 
@@ -141,9 +168,16 @@ public final class ShaderPackInstaller {
     private static void followUpWatch(Path shaderpacksDir, String fallbackShaderPackFilename) {
         long deadline = System.currentTimeMillis() + FOLLOW_UP_WATCH_MS;
         while (System.currentTimeMillis() < deadline) {
-            String desired = resolveDesiredShaderPack(shaderpacksDir, fallbackShaderPackFilename);
-            if (desired != null && !desired.isBlank() && !isIrisSettingsApplied(desired)) {
-                applyIrisSettingsAndProfileDefaults(shaderpacksDir, desired);
+            Boolean shaderEnabledChoice = getShaderEnabledChoice();
+            if (Boolean.FALSE.equals(shaderEnabledChoice)) {
+                applyIrisDisabledSettings();
+                return;
+            }
+            if (Boolean.TRUE.equals(shaderEnabledChoice)) {
+                String desired = resolveDesiredShaderPack(shaderpacksDir, fallbackShaderPackFilename);
+                if (desired != null && !desired.isBlank() && !isIrisSettingsApplied(desired)) {
+                    applyIrisSettingsAndProfileDefaults(shaderpacksDir, desired);
+                }
             }
             try {
                 Thread.sleep(FOLLOW_UP_POLL_MS);
@@ -152,6 +186,26 @@ public final class ShaderPackInstaller {
                 return;
             }
         }
+    }
+
+    private static void applyPreferenceForShaderPack(Path shaderpacksDir, String shaderPackFilename) {
+        if (shaderPackFilename == null || shaderPackFilename.isBlank()) {
+            return;
+        }
+        Boolean shaderEnabledChoice = getShaderEnabledChoice();
+        if (Boolean.TRUE.equals(shaderEnabledChoice)) {
+            applyIrisSettingsAndProfileDefaults(shaderpacksDir, shaderPackFilename);
+            return;
+        }
+        if (Boolean.FALSE.equals(shaderEnabledChoice)) {
+            applyIrisDisabledSettings();
+        }
+    }
+
+    private static void applyPreferredInstalledShaderSettings() {
+        Path shaderpacksDir = FabricLoader.getInstance().getGameDir().resolve(SHADERPACK_DIR);
+        String desired = resolveDesiredShaderPack(shaderpacksDir, null);
+        applyPreferenceForShaderPack(shaderpacksDir, desired);
     }
 
     private static String resolveDesiredShaderPack(Path shaderpacksDir, String fallbackShaderPackFilename) {
@@ -431,6 +485,107 @@ public final class ShaderPackInstaller {
         } catch (IOException e) {
             LOGGER.warn("Nem sikerült menteni az Iris beállításait: {}", irisProperties, e);
         }
+    }
+
+    private static void applyIrisDisabledSettings() {
+        Path configDir = FabricLoader.getInstance().getConfigDir();
+        try {
+            Files.createDirectories(configDir);
+        } catch (IOException e) {
+            LOGGER.warn("Nem sikerült létrehozni a konfigurációs mappát: {}", configDir, e);
+            return;
+        }
+
+        Path irisProperties = configDir.resolve(IRIS_PROPERTIES);
+        Properties properties = new Properties();
+        if (Files.exists(irisProperties)) {
+            try (InputStream in = Files.newInputStream(irisProperties)) {
+                properties.load(in);
+            } catch (IOException e) {
+                LOGGER.warn("Nem sikerült beolvasni az Iris beállításait: {}", irisProperties, e);
+            }
+        }
+
+        properties.setProperty(IRIS_ENABLE_SHADERS_KEY, "false");
+
+        try (OutputStream out = Files.newOutputStream(irisProperties)) {
+            properties.store(out, "Minewild Iris alapértelmezett beállítások");
+        } catch (IOException e) {
+            LOGGER.warn("Nem sikerült menteni az Iris beállításait: {}", irisProperties, e);
+        }
+    }
+
+    private static Boolean getShaderEnabledChoice() {
+        if (shaderChoiceLoaded) {
+            return cachedShaderEnabledChoice;
+        }
+        synchronized (SHADER_CHOICE_LOCK) {
+            if (shaderChoiceLoaded) {
+                return cachedShaderEnabledChoice;
+            }
+            cachedShaderEnabledChoice = readShaderEnabledChoice();
+            shaderChoiceLoaded = true;
+            return cachedShaderEnabledChoice;
+        }
+    }
+
+    private static void storeShaderEnabledChoice(boolean enabled) {
+        synchronized (SHADER_CHOICE_LOCK) {
+            Path configDir = FabricLoader.getInstance().getConfigDir();
+            try {
+                Files.createDirectories(configDir);
+            } catch (IOException e) {
+                LOGGER.warn("Nem sikerült létrehozni a konfigurációs mappát: {}", configDir, e);
+            }
+
+            Path choiceFile = configDir.resolve(SHADER_CHOICE_PROPERTIES);
+            Properties properties = new Properties();
+            if (Files.exists(choiceFile)) {
+                try (InputStream in = Files.newInputStream(choiceFile)) {
+                    properties.load(in);
+                } catch (IOException e) {
+                    LOGGER.warn("Nem sikerült beolvasni a shader választást: {}", choiceFile, e);
+                }
+            }
+
+            properties.setProperty(SHADER_CHOICE_KEY, Boolean.toString(enabled));
+
+            try (OutputStream out = Files.newOutputStream(choiceFile)) {
+                properties.store(out, "Minewild shader választás");
+            } catch (IOException e) {
+                LOGGER.warn("Nem sikerült menteni a shader választást: {}", choiceFile, e);
+            }
+
+            cachedShaderEnabledChoice = enabled;
+            shaderChoiceLoaded = true;
+        }
+    }
+
+    private static Boolean readShaderEnabledChoice() {
+        Path choiceFile = FabricLoader.getInstance().getConfigDir().resolve(SHADER_CHOICE_PROPERTIES);
+        if (Files.notExists(choiceFile)) {
+            return null;
+        }
+
+        Properties properties = new Properties();
+        try (InputStream in = Files.newInputStream(choiceFile)) {
+            properties.load(in);
+        } catch (IOException e) {
+            LOGGER.warn("Nem sikerült beolvasni a shader választást: {}", choiceFile, e);
+            return null;
+        }
+
+        String value = properties.getProperty(SHADER_CHOICE_KEY);
+        if (value == null) {
+            return null;
+        }
+        if ("true".equalsIgnoreCase(value)) {
+            return Boolean.TRUE;
+        }
+        if ("false".equalsIgnoreCase(value)) {
+            return Boolean.FALSE;
+        }
+        return null;
     }
 
     private static ShaderLookup fetchLatestVersion(String slug) {

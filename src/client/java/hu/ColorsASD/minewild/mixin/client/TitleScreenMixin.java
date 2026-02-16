@@ -1,7 +1,9 @@
 package hu.ColorsASD.minewild.mixin.client;
 
 import hu.ColorsASD.minewild.client.RestartRequiredScreen;
+import hu.ColorsASD.minewild.client.ShaderPreferenceScreen;
 import hu.ColorsASD.minewild.installer.ModInstaller;
+import hu.ColorsASD.minewild.installer.ShaderPackInstaller;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
@@ -26,6 +28,12 @@ public abstract class TitleScreenMixin extends Screen {
             }
             ci.cancel();
             return;
+        }
+        if (!ShaderPackInstaller.hasUserPreference()) {
+            if (!(client.currentScreen instanceof ShaderPreferenceScreen)) {
+                client.setScreen(new ShaderPreferenceScreen());
+            }
+            ci.cancel();
         }
     }
 }
