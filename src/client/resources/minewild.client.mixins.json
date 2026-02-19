@@ -7,10 +7,13 @@
     "AccessibilityOnboardingScreenMixin",
     "ButtonWidgetMixin",
     "ClientBrandRetrieverMixin",
+    "ConnectScreenBackgroundMixin",
     "DisconnectedScreenMixin",
+    "DownloadingTerrainScreenBackgroundMixin",
     "GameMenuScreenMixin",
     "MinecraftClientMixin",
     "ScreenInvokerMixin",
+    "SplashOverlayMixin",
     "ScreenBlurMixin",
     "TitleScreenMixin"
   ],

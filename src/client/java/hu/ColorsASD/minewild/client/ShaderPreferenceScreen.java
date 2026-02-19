@@ -7,16 +7,23 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.texture.NativeImage;
+import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
+import java.io.IOException;
+import java.io.InputStream;
+
 public class ShaderPreferenceScreen extends Screen {
     private static final Text TITLE = Text.literal("Shader beállítás");
+    private static final int BACKGROUND_COLOR = 0xFF111114;
     private static final Text LINE_ONE = Text.literal("Betöltsük a shader beállításokat?");
     private static final Text BUTTON_YES = Text.literal("Igen");
     private static final Text BUTTON_NO = Text.literal("Nem");
-    private static final Identifier LOGO_TEXTURE = ClientCompat.id("minewild", "textures/gui/restart_logo.png");
+    private static final Identifier LOGO_TEXTURE = ClientCompat.id("minewild", "runtime/gui/restart_logo");
+    private static final String LOGO_RESOURCE_PATH = "/assets/minewild/textures/gui/restart_logo.png";
     private static final int LOGO_TEXTURE_WIDTH = 965;
     private static final int LOGO_TEXTURE_HEIGHT = 965;
     private static final int LINE_HEIGHT = 9;
@@ -31,6 +38,8 @@ public class ShaderPreferenceScreen extends Screen {
     private int logoY;
     private int logoWidth;
     private int logoHeight;
+    private static boolean logoLoadAttempted;
+    private static boolean logoAvailable;
 
     public ShaderPreferenceScreen() {
         super(TITLE);
@@ -59,13 +68,27 @@ public class ShaderPreferenceScreen extends Screen {
             messageY = buttonY - LINE_HEIGHT - MESSAGE_GAP;
         }
 
-        this.addDrawableChild(ButtonWidget.builder(BUTTON_YES, button -> handleChoice(true))
-                .dimensions(buttonsX, buttonY, buttonWidth, buttonHeight)
-                .build());
+        this.addDrawableChild(
+                MinewildButtonWidget.create(
+                        BUTTON_YES,
+                        button -> handleChoice(true),
+                        buttonsX,
+                        buttonY,
+                        buttonWidth,
+                        buttonHeight
+                )
+        );
 
-        this.addDrawableChild(ButtonWidget.builder(BUTTON_NO, button -> handleChoice(false))
-                .dimensions(buttonsX + buttonWidth + BUTTON_GAP, buttonY, buttonWidth, buttonHeight)
-                .build());
+        this.addDrawableChild(
+                MinewildButtonWidget.create(
+                        BUTTON_NO,
+                        button -> handleChoice(false),
+                        buttonsX + buttonWidth + BUTTON_GAP,
+                        buttonY,
+                        buttonWidth,
+                        buttonHeight
+                )
+        );
     }
 
     @Override
@@ -86,6 +109,7 @@ public class ShaderPreferenceScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        ensureLogoLoaded();
         drawBackground(context);
         super.render(context, mouseX, mouseY, delta);
         ClientCompat.resetScissor(context, this.width, this.height);
@@ -96,6 +120,11 @@ public class ShaderPreferenceScreen extends Screen {
 
     @Override
     public void renderBackground(DrawContext context) {
+    }
+
+    // 1.21.x futás közben a Screen renderBackground(DrawContext, int, int, float)
+    // intermediary neve method_25420; ezt külön is kezeljük, hogy ne fusson a panoráma.
+    public void method_25420(DrawContext context, int mouseX, int mouseY, float delta) {
     }
 
     public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
@@ -135,7 +164,7 @@ public class ShaderPreferenceScreen extends Screen {
             ClientCompat.enableBlend();
             ClientCompat.defaultBlendFunc();
         }
-        context.fill(0, 0, this.width, this.height, 0xFF101010);
+        context.fill(0, 0, this.width, this.height, BACKGROUND_COLOR);
         if (ClientCompat.isMinecraft1211OrBelow()) {
             ClientCompat.depthMask(true);
             ClientCompat.enableDepthTest();
@@ -143,7 +172,7 @@ public class ShaderPreferenceScreen extends Screen {
     }
 
     private void drawLogo(DrawContext context) {
-        if (LOGO_TEXTURE == null) {
+        if (LOGO_TEXTURE == null || !logoAvailable) {
             return;
         }
         ClientCompat.disableDepthTest();
@@ -177,6 +206,31 @@ public class ShaderPreferenceScreen extends Screen {
             }
             ClientCompat.depthMask(true);
             ClientCompat.enableDepthTest();
+        }
+    }
+
+    private static void ensureLogoLoaded() {
+        if (logoLoadAttempted) {
+            return;
+        }
+        logoLoadAttempted = true;
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null || client.getTextureManager() == null) {
+            return;
+        }
+        try (InputStream in = ShaderPreferenceScreen.class.getResourceAsStream(LOGO_RESOURCE_PATH)) {
+            if (in == null) {
+                return;
+            }
+            NativeImage image = NativeImage.read(in);
+            NativeImageBackedTexture texture = ClientCompat.createBackedTexture(image);
+            if (texture == null || LOGO_TEXTURE == null) {
+                image.close();
+                return;
+            }
+            client.getTextureManager().registerTexture(LOGO_TEXTURE, texture);
+            logoAvailable = true;
+        } catch (IOException | RuntimeException ignored) {
         }
     }
 }

@@ -21,7 +21,23 @@ public class MinecraftClientMixin {
     @Inject(method = "tick", at = @At("TAIL"))
     private void minewild$autoConnect(CallbackInfo ci) {
         MinecraftClient client = (MinecraftClient) (Object) this;
-        AutoConnectController.tick(client);
-        ClientExitOnDisconnect.handleTick(client);
+        try {
+            AutoConnectController.tick(client);
+        } catch (RuntimeException ignored) {
+        }
+        try {
+            ClientExitOnDisconnect.handleTick(client);
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    @Inject(method = "scheduleStop", at = @At("HEAD"), require = 0)
+    private void minewild$markShutdownRequested(CallbackInfo ci) {
+        ClientExitOnDisconnect.markShutdownRequested();
+    }
+
+    @Inject(method = "close", at = @At("HEAD"), require = 0)
+    private void minewild$markShutdownRequestedOnClose(CallbackInfo ci) {
+        ClientExitOnDisconnect.markShutdownRequested();
     }
 }

@@ -1,7 +1,9 @@
 package hu.ColorsASD.minewild.mixin.client;
 
 import hu.ColorsASD.minewild.client.ClientCompat;
+import hu.ColorsASD.minewild.client.MinewildButtonWidget;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.screen.DisconnectedScreen;
 import net.minecraft.client.gui.screen.Screen;
@@ -34,7 +36,16 @@ public abstract class DisconnectedScreenMixin extends Screen {
     }
 
     @Inject(method = "init", at = @At("TAIL"))
-    private void minewild$layoutMinewildButtons(CallbackInfo ci) {
+    private void minewild$layoutMinewildButtonsOnInit(CallbackInfo ci) {
+        minewild$layoutMinewildButtons();
+    }
+
+    @Inject(method = "render", at = @At("HEAD"), require = 0)
+    private void minewild$layoutMinewildButtonsOnRender(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        minewild$layoutMinewildButtons();
+    }
+
+    private void minewild$layoutMinewildButtons() {
         ButtonWidget menuButton = findMenuButton();
         if (menuButton == null) {
             return;
@@ -55,9 +66,14 @@ public abstract class DisconnectedScreenMixin extends Screen {
 
         ButtonWidget supportButton = findButtonByLabel(SUPPORT_LABEL);
         if (supportButton == null) {
-            supportButton = ButtonWidget.builder(SUPPORT_LABEL, button -> openSupportPage())
-                    .dimensions(x, topRowY, fullWidth, height)
-                    .build();
+            supportButton = MinewildButtonWidget.create(
+                    SUPPORT_LABEL,
+                    button -> openSupportPage(),
+                    x,
+                    topRowY,
+                    fullWidth,
+                    height
+            );
             this.addDrawableChild(supportButton);
         } else {
             placeButton(supportButton, x, topRowY, fullWidth);
@@ -65,9 +81,14 @@ public abstract class DisconnectedScreenMixin extends Screen {
 
         ButtonWidget reconnectButton = findButtonByLabel(RECONNECT_LABEL);
         if (reconnectButton == null) {
-            reconnectButton = ButtonWidget.builder(RECONNECT_LABEL, button -> connectToMinewild())
-                    .dimensions(x, bottomRowY, smallWidth, height)
-                    .build();
+            reconnectButton = MinewildButtonWidget.create(
+                    RECONNECT_LABEL,
+                    button -> connectToMinewild(),
+                    x,
+                    bottomRowY,
+                    smallWidth,
+                    height
+            );
             this.addDrawableChild(reconnectButton);
         } else {
             placeButton(reconnectButton, x, bottomRowY, smallWidth);
@@ -75,9 +96,14 @@ public abstract class DisconnectedScreenMixin extends Screen {
 
         ButtonWidget exitButton = findButtonByLabel(EXIT_LABEL);
         if (exitButton == null) {
-            exitButton = ButtonWidget.builder(EXIT_LABEL, button -> MinecraftClient.getInstance().scheduleStop())
-                    .dimensions(rightX, bottomRowY, smallWidth, height)
-                    .build();
+            exitButton = MinewildButtonWidget.create(
+                    EXIT_LABEL,
+                    button -> MinecraftClient.getInstance().scheduleStop(),
+                    rightX,
+                    bottomRowY,
+                    smallWidth,
+                    height
+            );
             this.addDrawableChild(exitButton);
         } else {
             placeButton(exitButton, rightX, bottomRowY, smallWidth);

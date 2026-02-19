@@ -8,7 +8,18 @@ import net.minecraft.client.option.ParticlesMode;
 import net.minecraft.client.option.SimpleOption;
 import net.minecraft.client.util.Window;
 import net.minecraft.sound.SoundCategory;
+import org.lwjgl.BufferUtils;
+import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.GLFWImage;
+
+import javax.imageio.ImageIO;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
 
 public class MinewildClient implements ClientModInitializer {
     private static final String LANGUAGE_CODE = "hu_hu";
@@ -25,15 +36,20 @@ public class MinewildClient implements ClientModInitializer {
     private static final int BIOME_BLEND_RADIUS = 1;
     private static final int MIPMAP_LEVELS = 0;
     private static final int GUI_SCALE_RETRY_MS = 2000;
+    private static final int WINDOW_ICON_RETRY_MS = 250;
+    private static final int WINDOW_ICON_MAX_ATTEMPTS = 120;
     private static final int FPS_UNLIMITED_FALLBACK = 260;
+    private static final String WINDOW_ICON_RESOURCE_PATH = "/assets/minewild/textures/gui/restart_logo.png";
     private static final String SODIUM_OPTIONS_CLASS_NAME =
             "me.jellysquid.mods.sodium.client.gui.SodiumGameOptions";
     private static Integer cachedUnlimitedFps;
+    private static volatile boolean windowIconApplied;
 
     @Override
     public void onInitializeClient() {
         applyAccessibilityDefaultsImmediately();
         ModInstaller.beginInstallIfNeeded();
+        scheduleWindowIconUpdate();
         scheduleBaseSettings();
     }
 
@@ -88,6 +104,117 @@ public class MinewildClient implements ClientModInitializer {
         }, "minewild-options-init");
         worker.setDaemon(true);
         worker.start();
+    }
+
+    private void scheduleWindowIconUpdate() {
+        Thread worker = new Thread(() -> {
+            int attempts = 0;
+            while (!windowIconApplied && attempts < WINDOW_ICON_MAX_ATTEMPTS) {
+                attempts++;
+                MinecraftClient client = MinecraftClient.getInstance();
+                if (client != null && client.getWindow() != null) {
+                    try {
+                        client.execute(() -> applyWindowIcon(client));
+                    } catch (RuntimeException ignored) {
+                    }
+                }
+                if (windowIconApplied) {
+                    return;
+                }
+                try {
+                    Thread.sleep(WINDOW_ICON_RETRY_MS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }, "minewild-window-icon");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void applyWindowIcon(MinecraftClient client) {
+        if (windowIconApplied || client == null || client.getWindow() == null) {
+            return;
+        }
+        try {
+            long handle = client.getWindow().getHandle();
+            if (handle == 0L) {
+                return;
+            }
+            BufferedImage source = loadWindowIconSource();
+            if (source == null) {
+                return;
+            }
+            BufferedImage icon16 = scaleToSquare(source, 16);
+            BufferedImage icon32 = scaleToSquare(source, 32);
+            ByteBuffer pixels16 = imageToRgba(icon16);
+            ByteBuffer pixels32 = imageToRgba(icon32);
+            if (pixels16 == null || pixels32 == null) {
+                return;
+            }
+            GLFWImage.Buffer icons = GLFWImage.malloc(2);
+            try {
+                icons.position(0);
+                icons.width(16);
+                icons.height(16);
+                icons.pixels(pixels16);
+                icons.position(1);
+                icons.width(32);
+                icons.height(32);
+                icons.pixels(pixels32);
+                icons.position(0);
+                GLFW.glfwSetWindowIcon(handle, icons);
+            } finally {
+                icons.free();
+            }
+            windowIconApplied = true;
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    private static BufferedImage loadWindowIconSource() {
+        try (InputStream in = MinewildClient.class.getResourceAsStream(WINDOW_ICON_RESOURCE_PATH)) {
+            if (in == null) {
+                return null;
+            }
+            return ImageIO.read(in);
+        } catch (IOException ignored) {
+            return null;
+        }
+    }
+
+    private static BufferedImage scaleToSquare(BufferedImage source, int size) {
+        BufferedImage scaled = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = scaled.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        graphics.drawImage(source, 0, 0, size, size, null);
+        graphics.dispose();
+        return scaled;
+    }
+
+    private static ByteBuffer imageToRgba(BufferedImage image) {
+        if (image == null) {
+            return null;
+        }
+        int width = image.getWidth();
+        int height = image.getHeight();
+        if (width <= 0 || height <= 0) {
+            return null;
+        }
+        int[] argb = new int[width * height];
+        image.getRGB(0, 0, width, height, argb, 0, width);
+        ByteBuffer buffer = BufferUtils.createByteBuffer(width * height * 4);
+        for (int color : argb) {
+            buffer.put((byte) ((color >> 16) & 0xFF));
+            buffer.put((byte) ((color >> 8) & 0xFF));
+            buffer.put((byte) (color & 0xFF));
+            buffer.put((byte) ((color >> 24) & 0xFF));
+        }
+        buffer.flip();
+        return buffer;
     }
 
     private void applyBaseSettings(MinecraftClient client) {

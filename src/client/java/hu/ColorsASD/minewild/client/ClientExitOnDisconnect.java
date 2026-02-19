@@ -1,5 +1,6 @@
 package hu.ColorsASD.minewild.client;
 
+import hu.ColorsASD.minewild.mixin.client.ScreenInvokerMixin;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.screen.GameMenuScreen;
@@ -17,9 +18,14 @@ import java.util.WeakHashMap;
 public final class ClientExitOnDisconnect {
     private static final String KEY_DISCONNECT = "menu.disconnect";
     private static final String KEY_RETURN_TO_MENU = "menu.returnToMenu";
+    private static final String KEY_CANCEL = "gui.cancel";
+    private static final Text EXIT_LABEL = Text.literal("Kilépés");
     private static final Set<ButtonWidget> WRAPPED_BUTTONS =
             Collections.newSetFromMap(new WeakHashMap<>());
+    private static final Set<ButtonWidget> PATCHED_CONNECT_CANCELS =
+            Collections.newSetFromMap(new WeakHashMap<>());
     private static volatile boolean pendingExit = false;
+    private static volatile boolean shutdownRequested = false;
 
     private ClientExitOnDisconnect() {
     }
@@ -30,6 +36,15 @@ public final class ClientExitOnDisconnect {
             return;
         }
         pendingExit = true;
+    }
+
+    public static void markShutdownRequested() {
+        shutdownRequested = true;
+        ClientCompat.disablePanorama();
+    }
+
+    public static boolean isShutdownRequested() {
+        return shutdownRequested;
     }
 
     public static void handleDisconnect(MinecraftClient client) {
@@ -44,22 +59,32 @@ public final class ClientExitOnDisconnect {
             return;
         }
         pendingExit = false;
-        client.execute(client::scheduleStop);
+        client.execute(() -> {
+            markShutdownRequested();
+            client.scheduleStop();
+        });
     }
 
     public static void handleTick(MinecraftClient client) {
         handleDisconnect(client);
+        if (client == null || client.isInSingleplayer()) {
+            return;
+        }
+        replaceConnectCancelButton(client.currentScreen);
     }
 
     public static void handleScreenInit(Screen screen) {
-        if (!(screen instanceof GameMenuScreen)) {
+        if (screen == null) {
             return;
         }
         MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || client.isInSingleplayer()) {
             return;
         }
-        wrapDisconnectButton(screen);
+        if (screen instanceof GameMenuScreen) {
+            wrapDisconnectButton(screen);
+        }
+        replaceConnectCancelButton(screen);
     }
 
     private static void wrapDisconnectButton(Screen screen) {
@@ -68,6 +93,64 @@ public final class ClientExitOnDisconnect {
                 wrapPressAction(button);
                 return;
             }
+        }
+    }
+
+    private static void replaceConnectCancelButton(Screen screen) {
+        if (!ClientCompat.isConnectScreen(screen)) {
+            return;
+        }
+        for (Element element : screen.children()) {
+            if (!(element instanceof ButtonWidget button) || !isCancelButton(button.getMessage())) {
+                continue;
+            }
+            if (PATCHED_CONNECT_CANCELS.contains(button)) {
+                return;
+            }
+            ButtonWidget.PressAction exitAction = createExitAction();
+            if (writePressAction(button, exitAction)) {
+                button.setMessage(EXIT_LABEL);
+                PATCHED_CONNECT_CANCELS.add(button);
+                return;
+            }
+            if (replaceButtonWithExit(screen, button, exitAction)) {
+                PATCHED_CONNECT_CANCELS.add(button);
+            }
+            return;
+        }
+    }
+
+    private static ButtonWidget.PressAction createExitAction() {
+        return pressed -> {
+            MinecraftClient current = MinecraftClient.getInstance();
+            if (current != null) {
+                markShutdownRequested();
+                current.scheduleStop();
+            }
+        };
+    }
+
+    private static boolean replaceButtonWithExit(Screen screen, ButtonWidget original, ButtonWidget.PressAction action) {
+        if (screen == null || original == null || action == null) {
+            return false;
+        }
+        ButtonWidget replacement = MinewildButtonWidget.create(
+                EXIT_LABEL,
+                action,
+                original.getX(),
+                original.getY(),
+                original.getWidth(),
+                original.getHeight()
+        );
+        original.visible = false;
+        original.active = false;
+        try {
+            ((ScreenInvokerMixin) (Object) screen).minewild$invokeAddDrawableChild(replacement);
+            return true;
+        } catch (RuntimeException ignored) {
+            original.visible = true;
+            original.active = true;
+            return false;
         }
     }
 
@@ -88,6 +171,21 @@ public final class ClientExitOnDisconnect {
             return true;
         }
         return label.equals(Text.translatable(KEY_RETURN_TO_MENU).getString());
+    }
+
+    private static boolean isCancelButton(Text text) {
+        if (text == null) {
+            return false;
+        }
+        TextContent content = text.getContent();
+        if (content instanceof TranslatableTextContent translatable) {
+            return KEY_CANCEL.equals(translatable.getKey());
+        }
+        String label = text.getString();
+        if (label == null || label.isEmpty()) {
+            return false;
+        }
+        return label.equals(Text.translatable(KEY_CANCEL).getString());
     }
 
     private static void wrapPressAction(ButtonWidget button) {

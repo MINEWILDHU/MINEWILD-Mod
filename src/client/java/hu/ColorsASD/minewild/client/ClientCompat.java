@@ -34,6 +34,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.Locale;
+import net.minecraft.text.TextContent;
+import net.minecraft.text.TranslatableTextContent;
 
 public final class ClientCompat {
     public enum AutoConnectReadiness {
@@ -176,6 +178,39 @@ public final class ClientCompat {
 
     public static boolean isMinecraft1211OrAbove() {
         return isMinecraftAtLeast(1, 21, 1);
+    }
+
+    public static boolean isConnectScreen(Screen screen) {
+        if (screen == null) {
+            return false;
+        }
+        Class<?> connectScreenClass = findConnectScreenClass();
+        if (connectScreenClass != null && connectScreenClass.isInstance(screen)) {
+            return true;
+        }
+        String className = screen.getClass().getName();
+        if (CONNECT_SCREEN_CLASS.equals(className)
+                || CONNECT_SCREEN_CLASS_INTERMEDIARY.equals(className)
+                || CONNECT_SCREEN_FALLBACK.equals(className)
+                || className.endsWith(".ConnectScreen")
+                || className.endsWith(".class_412")
+                || className.endsWith(".DownloadingTerrainScreen")
+                || className.endsWith(".class_434")
+                || className.endsWith(".ReconfiguringScreen")
+                || className.endsWith(".class_8671")) {
+            return true;
+        }
+        TextContent content = screen.getTitle().getContent();
+        if (content instanceof TranslatableTextContent translatable) {
+            String key = translatable.getKey();
+            return "connect.connecting".equals(key)
+                    || "connect.authorizing".equals(key)
+                    || "connect.joining".equals(key)
+                    || "multiplayer.downloadingTerrain".equals(key)
+                    || "connect.reconfiguring".equals(key)
+                    || "connect.reconfiging".equals(key);
+        }
+        return false;
     }
 
     public static boolean isMinecraft1201Through1210() {
@@ -1004,9 +1039,15 @@ public final class ClientCompat {
         }
         ShaderProgram program = resolvePositionTexShader();
         if (program != null) {
-            RenderSystem.setShader(() -> program);
+            try {
+                RenderSystem.setShader(() -> program);
+            } catch (NoSuchMethodError | RuntimeException ignored) {
+            }
         }
-        RenderSystem.setShaderTexture(0, texture);
+        try {
+            RenderSystem.setShaderTexture(0, texture);
+        } catch (NoSuchMethodError | RuntimeException ignored) {
+        }
         enableBlend();
         defaultBlendFunc();
     }

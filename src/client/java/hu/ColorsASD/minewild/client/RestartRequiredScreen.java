@@ -22,8 +22,9 @@ import java.lang.reflect.Method;
 public class RestartRequiredScreen extends Screen {
     private static final Logger LOGGER = LoggerFactory.getLogger("MinewildRestartScreen");
     private static final Text TITLE = Text.literal("Újraindítás szükséges");
+    private static final int BACKGROUND_COLOR = 0xFF111114;
     private static final String LOGO_RESOURCE_PATH = "/assets/minewild/textures/gui/restart_logo.png";
-    private static final Identifier LOGO_TEXTURE = ClientCompat.id("minewild", "textures/gui/restart_logo.png");
+    private static final Identifier LOGO_TEXTURE = ClientCompat.id("minewild", "runtime/gui/restart_logo");
     private static final int LOGO_TEXTURE_WIDTH = 965;
     private static final int LOGO_TEXTURE_HEIGHT = 965;
     private static final int LINE_HEIGHT = 9;
@@ -81,10 +82,16 @@ public class RestartRequiredScreen extends Screen {
             messageY = buttonY - (LINE_HEIGHT * 2 + LINE_SPACING) - MESSAGE_GAP;
         }
 
-        actionButton = this.addDrawableChild(ButtonWidget.builder(getActionLabel(ModInstaller.hasExtraModsDetected()),
-                        button -> handleAction())
-                .dimensions(x, buttonY, buttonWidth, buttonHeight)
-                .build());
+        actionButton = this.addDrawableChild(
+                MinewildButtonWidget.create(
+                        getActionLabel(ModInstaller.hasExtraModsDetected()),
+                        button -> handleAction(),
+                        x,
+                        buttonY,
+                        buttonWidth,
+                        buttonHeight
+                )
+        );
 
         lastDownloading = !ModInstaller.isDownloadInProgress();
         lastDownloadFailed = ModInstaller.hasDownloadFailed();
@@ -128,6 +135,11 @@ public class RestartRequiredScreen extends Screen {
     public void renderBackground(DrawContext context) {
     }
 
+    // 1.21.x futás közben a Screen renderBackground(DrawContext, int, int, float)
+    // intermediary neve method_25420; ezt külön is kezeljük, hogy ne fusson a panoráma.
+    public void method_25420(DrawContext context, int mouseX, int mouseY, float delta) {
+    }
+
     public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
     }
 
@@ -145,7 +157,7 @@ public class RestartRequiredScreen extends Screen {
             ClientCompat.enableBlend();
             ClientCompat.defaultBlendFunc();
         }
-        context.fill(0, 0, this.width, this.height, 0xFF101010);
+        context.fill(0, 0, this.width, this.height, BACKGROUND_COLOR);
         if (ClientCompat.isMinecraft1211OrBelow()) {
             ClientCompat.depthMask(true);
             ClientCompat.enableDepthTest();
