@@ -10,6 +10,9 @@
   "icon": "assets/minewild/icon.png",
   "environment": "client",
   "entrypoints": {
+    "preLaunch": [
+      "hu.ColorsASD.minewild.prelaunch.MinewildPreLaunch"
+    ],
     "client": [
       "hu.ColorsASD.minewild.client.MinewildClient"
     ]

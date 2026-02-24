@@ -118,12 +118,12 @@ public abstract class GameMenuScreenMixin {
 
         ClientPauseMenuLinks.placeButton(returnButton, baseX, row1Y, fullWidth);
         ClientPauseMenuLinks.placeButton(webstoreButton, baseX, row2Y, fullWidth);
-        ClientPauseMenuLinks.placeButton(websiteButton, baseX, row3Y, columnWidth);
-        ClientPauseMenuLinks.placeButton(discordButton, rightX, row3Y, columnWidth);
-        ClientPauseMenuLinks.placeButton(supportButton, baseX, row4Y, columnWidth);
-        ClientPauseMenuLinks.placeButton(optionsButton, rightX, row4Y, columnWidth);
-        ClientPauseMenuLinks.placeButton(advancementsButton, baseX, row5Y, columnWidth);
-        ClientPauseMenuLinks.placeButton(statsButton, rightX, row5Y, columnWidth);
+        ClientPauseMenuLinks.placeButton(advancementsButton, baseX, row3Y, columnWidth);
+        ClientPauseMenuLinks.placeButton(statsButton, rightX, row3Y, columnWidth);
+        ClientPauseMenuLinks.placeButton(discordButton, baseX, row4Y, columnWidth);
+        ClientPauseMenuLinks.placeButton(supportButton, rightX, row4Y, columnWidth);
+        ClientPauseMenuLinks.placeButton(websiteButton, baseX, row5Y, columnWidth);
+        ClientPauseMenuLinks.placeButton(optionsButton, rightX, row5Y, columnWidth);
         if (disconnectButton != null) {
             ClientPauseMenuLinks.placeButton(disconnectButton, baseX, row6Y, fullWidth);
         }

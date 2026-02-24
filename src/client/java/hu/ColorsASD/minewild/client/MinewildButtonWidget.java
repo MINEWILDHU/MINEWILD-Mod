@@ -52,14 +52,14 @@ public class MinewildButtonWidget extends ButtonWidget {
 
         try {
             ClientCompat.drawTexture(
-                context,
-                texture,
-                this.getX(),
-                this.getY(),
-                this.getWidth(),
-                this.getHeight(),
-                200,
-                20
+                    context,
+                    texture,
+                    this.getX(),
+                    this.getY(),
+                    this.getWidth(),
+                    this.getHeight(),
+                    200,
+                    20
             );
         } catch (RuntimeException ignored) {
             super.renderButton(context, mouseX, mouseY, delta);

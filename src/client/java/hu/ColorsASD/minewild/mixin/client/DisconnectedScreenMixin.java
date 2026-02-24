@@ -1,6 +1,7 @@
 package hu.ColorsASD.minewild.mixin.client;
 
 import hu.ColorsASD.minewild.client.ClientCompat;
+import hu.ColorsASD.minewild.client.DisconnectedScreenLayoutBridge;
 import hu.ColorsASD.minewild.client.MinewildButtonWidget;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -8,19 +9,23 @@ import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.screen.DisconnectedScreen;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.ClickableWidget;
 import net.minecraft.text.Text;
 import net.minecraft.text.TextContent;
 import net.minecraft.text.TranslatableTextContent;
 import net.minecraft.util.Util;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 
 @Mixin(DisconnectedScreen.class)
-public abstract class DisconnectedScreenMixin extends Screen {
+public abstract class DisconnectedScreenMixin extends Screen implements DisconnectedScreenLayoutBridge {
     private static final String MINEWILD_ADDRESS = "play.minewild.hu";
     private static final String MINEWILD_NAME = "MINEWILD";
     private static final String SUPPORT_URL = "https://www.minewild.hu/support/";
@@ -28,43 +33,118 @@ public abstract class DisconnectedScreenMixin extends Screen {
     private static final String KEY_TO_TITLE = "gui.toTitle";
     private static final Text SUPPORT_LABEL = Text.literal("Segítségkérés");
     private static final Text RECONNECT_LABEL = Text.literal("Újracsatlakozás");
+    private static final Text LEGACY_RECONNECT_LABEL = Text.literal("Csatlakozás");
     private static final Text EXIT_LABEL = Text.literal("Kilépés");
     private static final int BUTTON_SPACING = 4;
+    private static final int DISCONNECTED_TEXT_TO_BUTTON_GAP = 10;
+    private static final int DEFAULT_BUTTON_WIDTH = 200;
+    private static final int DEFAULT_BUTTON_HEIGHT = 20;
+
+    @Unique
+    private int minewild$lastViewportWidth = -1;
+    @Unique
+    private int minewild$lastViewportHeight = -1;
+    @Unique
+    private int minewild$lastWindowWidth = -1;
+    @Unique
+    private int minewild$lastWindowHeight = -1;
 
     protected DisconnectedScreenMixin(Text title) {
         super(title);
     }
 
-    @Inject(method = "init", at = @At("TAIL"))
+    @Inject(method = "init", at = @At("TAIL"), require = 0)
     private void minewild$layoutMinewildButtonsOnInit(CallbackInfo ci) {
+        minewild$capture1202ViewportSize();
         minewild$layoutMinewildButtons();
     }
 
-    @Inject(method = "render", at = @At("HEAD"), require = 0)
-    private void minewild$layoutMinewildButtonsOnRender(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+    @Override
+    public void minewild$onExternalRenderTick(DrawContext context) {
+        minewild$sync1202ViewportSize(context);
         minewild$layoutMinewildButtons();
+    }
+
+    @Unique
+    private void minewild$sync1202ViewportSize(DrawContext context) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        int viewportWidth;
+        int viewportHeight;
+        int windowWidth = -1;
+        int windowHeight = -1;
+
+        if (client != null && client.getWindow() != null) {
+            viewportWidth = client.getWindow().getScaledWidth();
+            viewportHeight = client.getWindow().getScaledHeight();
+            windowWidth = client.getWindow().getWidth();
+            windowHeight = client.getWindow().getHeight();
+        } else if (context != null) {
+            viewportWidth = context.getScaledWindowWidth();
+            viewportHeight = context.getScaledWindowHeight();
+            windowWidth = viewportWidth;
+            windowHeight = viewportHeight;
+        } else {
+            return;
+        }
+
+        if (viewportWidth <= 0 || viewportHeight <= 0) {
+            return;
+        }
+
+        boolean sameViewport = viewportWidth == minewild$lastViewportWidth && viewportHeight == minewild$lastViewportHeight;
+        boolean sameWindow = windowWidth == minewild$lastWindowWidth && windowHeight == minewild$lastWindowHeight;
+        if (sameViewport && sameWindow) {
+            return;
+        }
+
+        minewild$lastViewportWidth = viewportWidth;
+        minewild$lastViewportHeight = viewportHeight;
+        minewild$lastWindowWidth = windowWidth;
+        minewild$lastWindowHeight = windowHeight;
+
+        if (this.width != viewportWidth || this.height != viewportHeight) {
+            this.width = viewportWidth;
+            this.height = viewportHeight;
+        }
+    }
+
+    @Unique
+    private void minewild$capture1202ViewportSize() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null || client.getWindow() == null) {
+            return;
+        }
+        int width = client.getWindow().getScaledWidth();
+        int height = client.getWindow().getScaledHeight();
+        int windowWidth = client.getWindow().getWidth();
+        int windowHeight = client.getWindow().getHeight();
+        if (width > 0 && height > 0) {
+            minewild$lastViewportWidth = width;
+            minewild$lastViewportHeight = height;
+            minewild$lastWindowWidth = windowWidth;
+            minewild$lastWindowHeight = windowHeight;
+        }
     }
 
     private void minewild$layoutMinewildButtons() {
         ButtonWidget menuButton = findMenuButton();
-        if (menuButton == null) {
-            return;
-        }
+        ButtonWidget supportButton = findButtonByLabel(SUPPORT_LABEL);
+        ButtonWidget reconnectButton = findReconnectButton();
+        ButtonWidget exitButton = findButtonByLabel(EXIT_LABEL);
 
-        int fullWidth = menuButton.getWidth();
-        int height = menuButton.getHeight();
-        int x = menuButton.getX();
-        int y = menuButton.getY();
+        int fullWidth = minewild$resolveFullButtonWidth(menuButton, supportButton, reconnectButton, exitButton);
+        int height = minewild$resolveButtonHeight(menuButton, supportButton, reconnectButton, exitButton);
+        int viewportWidth = minewild$resolveViewportWidth();
+        int x = (viewportWidth - fullWidth) / 2;
+        int y = minewild$resolve1202TopRowY(height, menuButton, supportButton);
         int smallWidth = (fullWidth - BUTTON_SPACING) / 2;
         int topRowY = y;
         int bottomRowY = y + height + BUTTON_SPACING;
         int rightX = x + smallWidth + BUTTON_SPACING;
 
-        // Elrejtjük az eredeti "Vissza a menübe/címképernyőre" gombot.
-        menuButton.visible = false;
-        menuButton.active = false;
+        // Hide vanilla "Back to menu/title" button; we replace it with custom layout.
+        minewild$hideAllMenuButtons();
 
-        ButtonWidget supportButton = findButtonByLabel(SUPPORT_LABEL);
         if (supportButton == null) {
             supportButton = MinewildButtonWidget.create(
                     SUPPORT_LABEL,
@@ -79,7 +159,6 @@ public abstract class DisconnectedScreenMixin extends Screen {
             placeButton(supportButton, x, topRowY, fullWidth);
         }
 
-        ButtonWidget reconnectButton = findButtonByLabel(RECONNECT_LABEL);
         if (reconnectButton == null) {
             reconnectButton = MinewildButtonWidget.create(
                     RECONNECT_LABEL,
@@ -94,11 +173,15 @@ public abstract class DisconnectedScreenMixin extends Screen {
             placeButton(reconnectButton, x, bottomRowY, smallWidth);
         }
 
-        ButtonWidget exitButton = findButtonByLabel(EXIT_LABEL);
         if (exitButton == null) {
             exitButton = MinewildButtonWidget.create(
                     EXIT_LABEL,
-                    button -> MinecraftClient.getInstance().scheduleStop(),
+                    button -> {
+                        MinecraftClient client = MinecraftClient.getInstance();
+                        if (client != null) {
+                            client.scheduleStop();
+                        }
+                    },
                     rightX,
                     bottomRowY,
                     smallWidth,
@@ -108,6 +191,123 @@ public abstract class DisconnectedScreenMixin extends Screen {
         } else {
             placeButton(exitButton, rightX, bottomRowY, smallWidth);
         }
+    }
+
+    @Unique
+    private int minewild$resolveViewportWidth() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client != null && client.getWindow() != null) {
+            int scaledWidth = client.getWindow().getScaledWidth();
+            if (scaledWidth > 0) {
+                return scaledWidth;
+            }
+        }
+        return this.width;
+    }
+
+    @Unique
+    private static int minewild$resolveFullButtonWidth(
+            ButtonWidget menuButton,
+            ButtonWidget supportButton,
+            ButtonWidget reconnectButton,
+            ButtonWidget exitButton
+    ) {
+        if (menuButton != null && menuButton.getWidth() > 0) {
+            return menuButton.getWidth();
+        }
+        if (supportButton != null && supportButton.getWidth() > 0) {
+            return supportButton.getWidth();
+        }
+        int reconnectWidth = reconnectButton == null ? 0 : reconnectButton.getWidth();
+        int exitWidth = exitButton == null ? 0 : exitButton.getWidth();
+        if (reconnectWidth > 0 && exitWidth > 0) {
+            return reconnectWidth + BUTTON_SPACING + exitWidth;
+        }
+        return DEFAULT_BUTTON_WIDTH;
+    }
+
+    @Unique
+    private static int minewild$resolveButtonHeight(
+            ButtonWidget menuButton,
+            ButtonWidget supportButton,
+            ButtonWidget reconnectButton,
+            ButtonWidget exitButton
+    ) {
+        if (menuButton != null && menuButton.getHeight() > 0) {
+            return menuButton.getHeight();
+        }
+        if (supportButton != null && supportButton.getHeight() > 0) {
+            return supportButton.getHeight();
+        }
+        if (reconnectButton != null && reconnectButton.getHeight() > 0) {
+            return reconnectButton.getHeight();
+        }
+        if (exitButton != null && exitButton.getHeight() > 0) {
+            return exitButton.getHeight();
+        }
+        return DEFAULT_BUTTON_HEIGHT;
+    }
+
+    @Unique
+    private int minewild$resolveFallbackX(ButtonWidget menuButton, ButtonWidget supportButton, int fullWidth) {
+        if (menuButton != null) {
+            return menuButton.getX();
+        }
+        if (supportButton != null) {
+            return supportButton.getX();
+        }
+        return (this.width - fullWidth) / 2;
+    }
+
+    @Unique
+    private int minewild$resolveFallbackY(ButtonWidget menuButton, ButtonWidget supportButton, int height) {
+        if (menuButton != null) {
+            return menuButton.getY();
+        }
+        if (supportButton != null) {
+            return supportButton.getY();
+        }
+        return (this.height - height) / 2;
+    }
+
+    @Unique
+    private int minewild$resolve1202TopRowY(int height, ButtonWidget menuButton, ButtonWidget supportButton) {
+        int textBottom = Integer.MIN_VALUE;
+        int boundedTextBottom = Integer.MIN_VALUE;
+        int centerX = minewild$resolveViewportWidth() / 2;
+        final int centerTolerance = 14;
+        int maxAllowedTextBottom = this.height
+                - (DISCONNECTED_TEXT_TO_BUTTON_GAP + (height * 2) + BUTTON_SPACING);
+        for (Element element : this.children()) {
+            if (!(element instanceof ClickableWidget widget) || widget instanceof ButtonWidget) {
+                continue;
+            }
+            if (!widget.visible) {
+                continue;
+            }
+            int widgetCenterX = widget.getX() + (widget.getWidth() / 2);
+            if (Math.abs(widgetCenterX - centerX) > centerTolerance) {
+                continue;
+            }
+            int bottom = widget.getY() + widget.getHeight();
+            if (bottom > textBottom) {
+                textBottom = bottom;
+            }
+            if (bottom <= maxAllowedTextBottom && bottom > boundedTextBottom) {
+                boundedTextBottom = bottom;
+            }
+        }
+        int resolvedTextBottom = boundedTextBottom != Integer.MIN_VALUE ? boundedTextBottom : textBottom;
+        if (resolvedTextBottom != Integer.MIN_VALUE) {
+            return resolvedTextBottom + DISCONNECTED_TEXT_TO_BUTTON_GAP;
+        }
+        if (menuButton != null) {
+            return menuButton.getY();
+        }
+        if (supportButton != null) {
+            return supportButton.getY();
+        }
+        return (this.height - height) / 2;
     }
 
     private ButtonWidget findMenuButton() {
@@ -121,16 +321,47 @@ public abstract class DisconnectedScreenMixin extends Screen {
 
     private ButtonWidget findButtonByLabel(Text label) {
         String expected = label.getString();
+        ButtonWidget found = null;
+        List<ButtonWidget> duplicates = new ArrayList<>();
         for (Element element : this.children()) {
             if (!(element instanceof ButtonWidget button)) {
                 continue;
             }
             String actual = button.getMessage() == null ? "" : button.getMessage().getString();
-            if (expected.equals(actual)) {
-                return button;
+            if (!expected.equals(actual)) {
+                continue;
+            }
+            if (found == null) {
+                found = button;
+            } else {
+                duplicates.add(button);
             }
         }
-        return null;
+        for (ButtonWidget duplicate : duplicates) {
+            minewild$removeElement(duplicate);
+        }
+        return found;
+    }
+
+    private ButtonWidget findReconnectButton() {
+        if (RECONNECT_LABEL.getString().equals(LEGACY_RECONNECT_LABEL.getString())) {
+            return findButtonByLabel(RECONNECT_LABEL);
+        }
+        ButtonWidget reconnectButton = findButtonByLabel(RECONNECT_LABEL);
+        ButtonWidget legacyReconnectButton = findButtonByLabel(LEGACY_RECONNECT_LABEL);
+        if (reconnectButton != null && legacyReconnectButton != null) {
+            if (legacyReconnectButton != reconnectButton) {
+                minewild$removeElement(legacyReconnectButton);
+            }
+            return reconnectButton;
+        }
+        if (reconnectButton != null) {
+            return reconnectButton;
+        }
+        if (legacyReconnectButton != null) {
+            legacyReconnectButton.setMessage(RECONNECT_LABEL);
+        }
+        return legacyReconnectButton;
     }
 
     private static void placeButton(ButtonWidget button, int x, int y, int width) {
@@ -174,7 +405,38 @@ public abstract class DisconnectedScreenMixin extends Screen {
         }
     }
 
-    private void connectToMinewild() {
-        ClientCompat.connectToServer(this, MinecraftClient.getInstance(), MINEWILD_NAME, MINEWILD_ADDRESS);
+    @Unique
+    private void minewild$hideAllMenuButtons() {
+        for (Element element : this.children()) {
+            if (!(element instanceof ButtonWidget button) || !isMenuButton(button.getMessage())) {
+                continue;
+            }
+            button.visible = false;
+            button.active = false;
+        }
     }
+
+    @Unique
+    private void minewild$removeElement(Element element) {
+        if (element == null) {
+            return;
+        }
+        try {
+            ((ScreenInvokerMixin) (Object) this).minewild$invokeRemove(element);
+        } catch (RuntimeException ignored) {
+            if (element instanceof ClickableWidget widget) {
+                widget.visible = false;
+                widget.active = false;
+            }
+        }
+    }
+
+    private void connectToMinewild() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null) {
+            return;
+        }
+        ClientCompat.connectToServer(this, client, MINEWILD_NAME, MINEWILD_ADDRESS);
+    }
+
 }

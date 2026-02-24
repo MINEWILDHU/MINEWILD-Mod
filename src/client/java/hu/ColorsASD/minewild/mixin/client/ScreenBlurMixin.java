@@ -3,6 +3,7 @@ package hu.ColorsASD.minewild.mixin.client;
 import hu.ColorsASD.minewild.client.ClientCompat;
 import hu.ColorsASD.minewild.client.ClientExitOnDisconnect;
 import hu.ColorsASD.minewild.client.ClientPauseMenuLinks;
+import hu.ColorsASD.minewild.client.DisconnectedScreenLayoutBridge;
 import hu.ColorsASD.minewild.client.ResourcePackAutoAccept;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.DisconnectedScreen;
@@ -120,6 +121,17 @@ public class ScreenBlurMixin {
         try {
             ClientPauseMenuLinks.handleScreenInit(screen);
         } catch (RuntimeException ignored) {
+        }
+    }
+
+    @Inject(method = "render", at = @At("HEAD"), require = 0)
+    private void minewild$driveDisconnectedLayout(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
+        Screen screen = (Screen) (Object) this;
+        if (!(screen instanceof DisconnectedScreen)) {
+            return;
+        }
+        if (screen instanceof DisconnectedScreenLayoutBridge bridge) {
+            bridge.minewild$onExternalRenderTick(context);
         }
     }
 

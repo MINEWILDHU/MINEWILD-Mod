@@ -36,15 +36,19 @@ dependencies {
 }
 
 processResources {
-    inputs.property "version", project.version
-    inputs.property "minecraft_version_range", project.minecraft_version_range
-    inputs.property "loader_version", project.loader_version
-    filteringCharset "UTF-8"
+    def versionValue = project.version
+    def minecraftVersionRangeValue = project.minecraft_version_range
+    def loaderVersionValue = project.loader_version
+
+    inputs.property "version", versionValue
+    inputs.property "minecraft_version_range", minecraftVersionRangeValue
+    inputs.property "loader_version", loaderVersionValue
+    filteringCharset = "UTF-8"
 
     filesMatching("fabric.mod.json") {
-        expand "version": project.version,
-                "minecraft_version_range": project.minecraft_version_range,
-                "loader_version": project.loader_version
+        expand "version": versionValue,
+                "minecraft_version_range": minecraftVersionRangeValue,
+                "loader_version": loaderVersionValue
     }
 }
 

@@ -176,6 +176,18 @@ public final class ClientCompat {
         return isMinecraftAtLeast(1, 21, 6);
     }
 
+    public static boolean isMinecraft1216() {
+        return isMinecraftAtLeast(1, 21, 6) && isMinecraftAtMost(1, 21, 6);
+    }
+
+    public static boolean isMinecraft1217() {
+        return isMinecraftAtLeast(1, 21, 7) && isMinecraftAtMost(1, 21, 7);
+    }
+
+    public static boolean isMinecraft1218() {
+        return isMinecraftAtLeast(1, 21, 8) && isMinecraftAtMost(1, 21, 8);
+    }
+
     public static boolean isMinecraft1211OrAbove() {
         return isMinecraftAtLeast(1, 21, 1);
     }
@@ -194,6 +206,8 @@ public final class ClientCompat {
                 || CONNECT_SCREEN_FALLBACK.equals(className)
                 || className.endsWith(".ConnectScreen")
                 || className.endsWith(".class_412")
+                || className.endsWith(".ProgressScreen")
+                || className.endsWith(".class_435")
                 || className.endsWith(".DownloadingTerrainScreen")
                 || className.endsWith(".class_434")
                 || className.endsWith(".ReconfiguringScreen")
@@ -215,6 +229,10 @@ public final class ClientCompat {
 
     public static boolean isMinecraft1201Through1210() {
         return isMinecraftAtLeast(1, 20, 1) && isMinecraftAtMost(1, 21, 0);
+    }
+
+    public static boolean isMinecraft1202() {
+        return isMinecraftAtLeast(1, 20, 2) && isMinecraftAtMost(1, 20, 2);
     }
 
 

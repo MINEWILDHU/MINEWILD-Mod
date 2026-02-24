@@ -41,11 +41,54 @@ public final class ModInstaller {
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
     private static final String ISMERETLEN_VERZIO = "ismeretlen";
+    private static final String DH_CONFIG_FILE = "DistantHorizons.toml";
+    private static final String DH_AUTO_UPDATER_TABLE = "[client.advanced.autoUpdater]";
 
     private static final String GAME_VERSION = resolveGameVersion();
     private static final String MODRINTH_VERSION_URL_PREFIX = "https://api.modrinth.com/v2/project/";
     private static final String MODRINTH_VERSION_URL_SUFFIX =
             "/version?loaders=[%22fabric%22]&game_versions=[%22" + GAME_VERSION + "%22]";
+    private static final List<VersionOverride> VERSION_OVERRIDES = List.of(
+            // 1.20.2-n a frissebb Distant Horizons verziók Iris 1.7.5+ verziót várnak.
+            // Itt stabil, egymással kompatibilis párost preferálunk.
+            new VersionOverride("1.20.2", "iris", "1.6.14+1.20.2"),
+            new VersionOverride("1.20.2", "distanthorizons", "2.0.1-a-1.20.2"),
+            // 1.20.4-en az Iris 1.7.2 és a DH 2.4.x ütközik egymással.
+            // Kompatibilis, nem legfrissebb párost pinelünk.
+            new VersionOverride("1.20.4", "iris", "1.7.2+1.20.4"),
+            new VersionOverride("1.20.4", "distanthorizons", "2.1.2-a-1.20.4"),
+            // 1.20.5-höz kompatibilis párosítás:
+            // - Sodium csak 0.5.8 környéke érhető el stabilan 1.20.5-re,
+            // - ezért az ezt igénylő Iris/Indium/Sodium Extra verziókat pineljük.
+            new VersionOverride("1.20.5", "sodium", "mc1.20.5-0.5.8"),
+            new VersionOverride("1.20.5", "indium", "1.0.31+mc1.20.4"),
+            new VersionOverride("1.20.5", "iris", "1.7.0+1.20.5"),
+            new VersionOverride("1.20.5", "sodium-extra", "mc1.20.5-0.5.4"),
+            // 1.20.6-on Irisből jelenleg 1.7.2 a legfrissebb,
+            // a DH 2.2.0+ pedig ezt inkompatibilisnek jelöli.
+            // Ezért 1.20.6-ra kompatibilis párost pinelünk.
+            new VersionOverride("1.20.6", "iris", "1.7.2+1.20.6"),
+            new VersionOverride("1.20.6", "distanthorizons", "2.1.2-a-1.20.6"),
+            // 1.21.2-n az Iris 1.8.0 a Sodium CloudRenderer régebbi mezőnevét várja
+            // (cachedGeometry), ami 0.6.1-től builtGeometry-ra változott.
+            // Emiatt itt kifejezetten 0.6.0-ra pinelünk.
+            new VersionOverride("1.21.2", "iris", "1.8.0+1.21.3-fabric"),
+            new VersionOverride("1.21.2", "sodium", "mc1.21.3-0.6.0-fabric"),
+            // 1.21.2-n a Reese's 1.8.3 már Sodium 0.6.5+ verziót igényel.
+            // A fenti Sodium 0.6.1 mellé a 1.8.0-s kiadást kell használni.
+            new VersionOverride("1.21.2", "reeses-sodium-options", "mc1.21.3-1.8.0+fabric"),
+            // 1.21.2-n a MoreCulling 1.1.1 már a Sodium újabb hookjára épít
+            // (renderModelFastDirections), ami 0.6.1-ben még nincs.
+            // Ezért a 1.1.0 verziót pineljük.
+            new VersionOverride("1.21.2", "moreculling", "1.1.0"),
+            // 1.21.3-nál az Iris jelenleg 1.8.1-en áll.
+            // A Sodium 0.6.9+ már Iris 1.8.7-et igényel, ezért 0.6.8-at pinelünk.
+            new VersionOverride("1.21.3", "iris", "1.8.1+1.21.3-fabric"),
+            new VersionOverride("1.21.3", "sodium", "mc1.21.3-0.6.8-fabric"),
+            // A 1.21.3-as MoreCulling 1.1.1 már a renderModelFastDirections hookot használja,
+            // ami 0.6.8-ban megvan, ezért ezt a párost rögzítjük.
+            new VersionOverride("1.21.3", "moreculling", "1.1.1")
+    );
 
     private static final String OWN_MOD_ID = "minewild";
     private static final List<RequiredMod> REQUIRED_MODS = List.of(
@@ -98,6 +141,7 @@ public final class ModInstaller {
         }
 
         ShaderPackInstaller.beginInstallIfNeeded();
+        ensureDistantHorizonsUpdaterDisabled();
 
         downloadTotal = 0;
         downloadDone = 0;
@@ -553,6 +597,93 @@ public final class ModInstaller {
         return Set.copyOf(ids);
     }
 
+    private static void ensureDistantHorizonsUpdaterDisabled() {
+        Path configPath = FabricLoader.getInstance().getGameDir().resolve("config").resolve(DH_CONFIG_FILE);
+        if (Files.notExists(configPath)) {
+            return;
+        }
+        try {
+            List<String> lines = Files.readAllLines(configPath, StandardCharsets.UTF_8);
+            int sectionStart = -1;
+            int sectionEnd = lines.size();
+            for (int i = 0; i < lines.size(); i++) {
+                String trimmed = lines.get(i).trim();
+                if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+                    continue;
+                }
+                if (sectionStart >= 0) {
+                    sectionEnd = i;
+                    break;
+                }
+                if (DH_AUTO_UPDATER_TABLE.equals(trimmed)) {
+                    sectionStart = i;
+                }
+            }
+
+            boolean changed = false;
+            if (sectionStart < 0) {
+                if (!lines.isEmpty() && !lines.get(lines.size() - 1).isBlank()) {
+                    lines.add("");
+                }
+                lines.add(DH_AUTO_UPDATER_TABLE);
+                lines.add("\tenableAutoUpdater = false");
+                lines.add("\tenableSilentUpdates = false");
+                changed = true;
+            } else {
+                boolean foundAutoUpdater = false;
+                boolean foundSilentUpdates = false;
+                for (int i = sectionStart + 1; i < sectionEnd; i++) {
+                    String line = lines.get(i);
+                    String trimmed = line.trim();
+                    if (trimmed.startsWith("enableAutoUpdater")) {
+                        foundAutoUpdater = true;
+                        String replacement = leadingWhitespace(line) + "enableAutoUpdater = false";
+                        if (!line.equals(replacement)) {
+                            lines.set(i, replacement);
+                            changed = true;
+                        }
+                        continue;
+                    }
+                    if (trimmed.startsWith("enableSilentUpdates")) {
+                        foundSilentUpdates = true;
+                        String replacement = leadingWhitespace(line) + "enableSilentUpdates = false";
+                        if (!line.equals(replacement)) {
+                            lines.set(i, replacement);
+                            changed = true;
+                        }
+                    }
+                }
+                int insertAt = sectionEnd;
+                if (!foundAutoUpdater) {
+                    lines.add(insertAt++, "\tenableAutoUpdater = false");
+                    changed = true;
+                }
+                if (!foundSilentUpdates) {
+                    lines.add(insertAt, "\tenableSilentUpdates = false");
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                Files.write(configPath, lines, StandardCharsets.UTF_8);
+                LOGGER.info("Distant Horizons updater letiltva: {}", configPath);
+            }
+        } catch (IOException e) {
+            LOGGER.warn("Nem sikerült frissíteni a Distant Horizons configot: {}", configPath, e);
+        }
+    }
+
+    private static String leadingWhitespace(String line) {
+        if (line == null || line.isEmpty()) {
+            return "";
+        }
+        int index = 0;
+        while (index < line.length() && Character.isWhitespace(line.charAt(index))) {
+            index++;
+        }
+        return line.substring(0, index);
+    }
+
     private static String resolveGameVersion() {
         Optional<ModContainer> minecraft = FabricLoader.getInstance().getModContainer("minecraft");
         if (minecraft.isPresent()) {
@@ -599,6 +730,10 @@ public final class ModInstaller {
                 LOGGER.warn("Nincs Modrinth verzió ehhez: {}", slug);
                 return ModrinthLookup.noMatch();
             }
+            ModrinthVersion override = findOverrideVersion(slug, versions);
+            if (override != null) {
+                return ModrinthLookup.success(override);
+            }
             return ModrinthLookup.success(versions[0]);
         } catch (IOException e) {
             LOGGER.warn("Nem sikerült lekérdezni a Modrinth-et ehhez: {}", slug, e);
@@ -608,6 +743,28 @@ public final class ModInstaller {
             LOGGER.warn("A Modrinth kérés megszakadt ehhez: {}", slug, e);
             return ModrinthLookup.failed();
         }
+    }
+
+    private static ModrinthVersion findOverrideVersion(String slug, ModrinthVersion[] versions) {
+        if (slug == null || slug.isBlank() || versions == null || versions.length == 0) {
+            return null;
+        }
+        for (VersionOverride override : VERSION_OVERRIDES) {
+            if (!override.matches(GAME_VERSION, slug)) {
+                continue;
+            }
+            for (ModrinthVersion version : versions) {
+                if (version == null || version.version_number == null) {
+                    continue;
+                }
+                if (override.versionNumber.equals(version.version_number)) {
+                    LOGGER.info("Kompatibilitási verzió kiválasztva {}-hoz: {}", slug, version.version_number);
+                    return version;
+                }
+            }
+            LOGGER.warn("A preferált kompatibilitási verzió nem található {}-hoz: {}", slug, override.versionNumber);
+        }
+        return null;
     }
 
     private static ModrinthFile pickPrimaryFile(ModrinthVersion version) {
@@ -684,7 +841,28 @@ public final class ModInstaller {
     }
 
     private static final class ModrinthVersion {
+        private String version_number;
         private List<ModrinthFile> files;
+    }
+
+    private static final class VersionOverride {
+        private final String gameVersion;
+        private final String slug;
+        private final String versionNumber;
+
+        private VersionOverride(String gameVersion, String slug, String versionNumber) {
+            this.gameVersion = gameVersion;
+            this.slug = slug;
+            this.versionNumber = versionNumber;
+        }
+
+        private boolean matches(String currentGameVersion, String currentSlug) {
+            return gameVersion != null
+                    && slug != null
+                    && versionNumber != null
+                    && gameVersion.equals(currentGameVersion)
+                    && slug.equals(currentSlug);
+        }
     }
 
     private static final class ModrinthLookup {

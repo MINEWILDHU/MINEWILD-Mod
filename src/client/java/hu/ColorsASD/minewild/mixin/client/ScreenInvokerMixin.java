@@ -11,4 +11,7 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 public interface ScreenInvokerMixin {
     @Invoker("addDrawableChild")
     <T extends Element & Drawable & Selectable> T minewild$invokeAddDrawableChild(T drawableElement);
+
+    @Invoker("remove")
+    void minewild$invokeRemove(Element element);
 }
