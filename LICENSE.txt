@@ -1,2 +1,23 @@
+MINEWILD Mod Licenc
 Copyright (c) 2026 ColorsASD
-All rights reserved.
+Minden jog fenntartva.
+
+Felhasználási engedély:
+- A mod módosítatlan példányát letöltheted, telepítheted és személyes játékra használhatod.
+
+Korlátozások:
+- A mod (forráskód vagy bináris forma) előzetes írásos engedély nélkül nem terjeszthető.
+- A mod előzetes írásos engedély nélkül nem módosítható, nem alakítható át, nem dekompilálható, nem visszafejthető, és nem készíthető belőle terjesztésre szánt származékos mű.
+- A mod előzetes írásos engedély nélkül nem értékesíthető, nem adható továbblicencbe, nem adható bérbe, és egyéb módon sem hasznosítható kereskedelmi célra.
+- A szerzői jogi, attribúciós vagy márkajelzési megjelölések nem távolíthatók el és nem módosíthatók.
+
+Harmadik féltől származó tartalmak:
+- A mod tartalmazhat vagy használhat harmadik féltől származó szoftvereket, eszközöket és könyvtárakat.
+- A harmadik féltől származó komponensekre azok saját licencei vonatkoznak; ezek a feltételek elsőbbséget élveznek az adott komponensek esetén.
+
+Jótállás és felelősség:
+- A szoftver „jelen állapotában” kerül biztosításra, kifejezett vagy hallgatólagos garancia nélkül.
+- A szerző semmilyen, a szoftver használatából eredő kárért, veszteségért vagy egyéb igényért nem vállal felelősséget.
+
+Kapcsolat:
+- Engedélykéréshez vagy licenceléssel kapcsolatos kérdésekhez vedd fel a kapcsolatot a szerzővel.
