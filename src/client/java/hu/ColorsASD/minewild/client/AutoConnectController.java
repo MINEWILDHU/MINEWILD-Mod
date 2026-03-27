@@ -28,6 +28,10 @@ public final class AutoConnectController {
             titleTicks = 0;
             return;
         }
+        if (ShaderPackInstaller.hasOutdatedShaderDetected()) {
+            titleTicks = 0;
+            return;
+        }
         if (client.world != null || client.getNetworkHandler() != null) {
             titleTicks = 0;
             return;
@@ -59,6 +63,9 @@ public final class AutoConnectController {
             return false;
         }
         if (!ShaderPackInstaller.hasUserPreference()) {
+            return false;
+        }
+        if (ShaderPackInstaller.hasOutdatedShaderDetected()) {
             return false;
         }
         Screen parent = client.currentScreen;

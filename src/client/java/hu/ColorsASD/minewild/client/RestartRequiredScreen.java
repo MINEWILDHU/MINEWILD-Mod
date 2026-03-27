@@ -34,12 +34,12 @@ public class RestartRequiredScreen extends Screen {
     private static final int MESSAGE_GAP = 16;
     private static final Text BUTTON_DELETE = Text.literal("Törlés");
     private static final Text BUTTON_EXIT = Text.literal("Kilépés");
-    private Text lineOne;
-    private Text lineTwo;
-    private ButtonWidget actionButton;
-    private boolean lastDownloading;
-    private boolean lastDownloadFailed;
-    private boolean lastExtraModsDetected;
+    protected Text lineOne;
+    protected Text lineTwo;
+    protected ButtonWidget actionButton;
+    protected boolean lastDownloading;
+    protected boolean lastDownloadFailed;
+    protected boolean lastExtraModsDetected;
     private int messageY;
     private int logoX;
     private int logoY;
@@ -56,7 +56,11 @@ public class RestartRequiredScreen extends Screen {
     private static Boolean nativeImageWriteArgb;
 
     public RestartRequiredScreen() {
-        super(TITLE);
+        this(TITLE);
+    }
+
+    protected RestartRequiredScreen(Text title) {
+        super(title);
     }
 
     @Override
@@ -103,8 +107,16 @@ public class RestartRequiredScreen extends Screen {
     @Override
     public void tick() {
         super.tick();
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (!(this instanceof OutdatedModsScreen)
+                && ModInstaller.hasOutdatedModsDetected()
+                && !ModInstaller.hasExtraModsDetected()) {
+            if (!(client.currentScreen instanceof OutdatedModsScreen)) {
+                client.setScreen(new OutdatedModsScreen());
+            }
+            return;
+        }
         if (!ModInstaller.isRestartRequired()) {
-            MinecraftClient client = MinecraftClient.getInstance();
             if (client.currentScreen == this) {
                 client.setScreen(new TitleScreen());
             }
@@ -619,7 +631,7 @@ public class RestartRequiredScreen extends Screen {
         }
     }
 
-    private void updateMessage() {
+    protected void updateMessage() {
         boolean downloading = ModInstaller.isDownloadInProgress();
         boolean downloadFailed = ModInstaller.hasDownloadFailed();
         boolean extraMods = ModInstaller.hasExtraModsDetected();
@@ -651,11 +663,11 @@ public class RestartRequiredScreen extends Screen {
         }
     }
 
-    private Text getActionLabel(boolean extraMods) {
+    protected Text getActionLabel(boolean extraMods) {
         return extraMods ? BUTTON_DELETE : BUTTON_EXIT;
     }
 
-    private void handleAction() {
+    protected void handleAction() {
         if (ModInstaller.hasExtraModsDetected()) {
             ModInstaller.requestExtraModDeletion();
         }

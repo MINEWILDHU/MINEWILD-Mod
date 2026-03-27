@@ -25,6 +25,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -131,6 +132,8 @@ public final class ModInstaller {
     private static volatile int downloadDone = 0;
     private static volatile boolean downloadFailed = false;
     private static volatile boolean extraModsDetected = false;
+    private static volatile boolean outdatedModsDetected = false;
+    private static volatile List<Path> detectedOutdatedModFiles = List.of();
 
     private ModInstaller() {
     }
@@ -148,20 +151,17 @@ public final class ModInstaller {
         downloadInProgress = false;
         downloadFailed = false;
         extraModsDetected = false;
+        outdatedModsDetected = false;
+        detectedOutdatedModFiles = List.of();
 
         Path modsDir = FabricLoader.getInstance().getGameDir().resolve("mods");
         boolean hasExtraMods = hasExtraMods(modsDir);
         if (hasExtraMods) {
             extraModsDetected = true;
         }
-        if (areAllModsLoaded() && !hasExtraMods) {
-            restartRequired = false;
-            return;
-        }
+        restartRequired = hasExtraMods || !areAllModsLoaded();
 
-        restartRequired = true;
-
-        Thread worker = new Thread(() -> downloadMissingMods(modsDir), "minewild-mod-installer");
+        Thread worker = new Thread(() -> inspectAndInstallMods(modsDir), "minewild-mod-installer");
         worker.setDaemon(true);
         worker.start();
     }
@@ -190,9 +190,18 @@ public final class ModInstaller {
         return extraModsDetected;
     }
 
+    public static boolean hasOutdatedModsDetected() {
+        return outdatedModsDetected;
+    }
+
     public static void requestExtraModDeletion() {
         Path modsDir = FabricLoader.getInstance().getGameDir().resolve("mods");
         removeExtraMods(modsDir);
+    }
+
+    public static void requestOutdatedModDeletion() {
+        Path modsDir = FabricLoader.getInstance().getGameDir().resolve("mods");
+        removeOutdatedMods(modsDir);
     }
 
     private static boolean areAllModsLoaded() {
@@ -202,6 +211,19 @@ public final class ModInstaller {
             }
         }
         return true;
+    }
+
+    private static void inspectAndInstallMods(Path modsDir) {
+        if (!extraModsDetected) {
+            List<Path> outdatedMods = findOutdatedModFiles(modsDir);
+            updateOutdatedModState(outdatedMods);
+            if (!outdatedMods.isEmpty()) {
+                restartRequired = true;
+                LOGGER.info("Elavult modok érzékelve: {}", formatFileList(outdatedMods));
+                return;
+            }
+        }
+        downloadMissingMods(modsDir);
     }
 
     private static void downloadMissingMods(Path modsDir) {
@@ -270,7 +292,7 @@ public final class ModInstaller {
             }
         } finally {
             downloadInProgress = false;
-            if (!downloadFailed && !extraModsDetected && !anyInstallable) {
+            if (!downloadFailed && !extraModsDetected && !outdatedModsDetected && !anyInstallable) {
                 restartRequired = false;
             }
         }
@@ -313,6 +335,36 @@ public final class ModInstaller {
         extraModsDetected = !findExtraModFiles(modsDir).isEmpty();
     }
 
+    private static void removeOutdatedMods(Path modsDir) {
+        List<Path> outdatedMods = detectedOutdatedModFiles;
+        if (outdatedMods.isEmpty()) {
+            outdatedMods = findOutdatedModFiles(modsDir);
+        }
+        if (outdatedMods.isEmpty()) {
+            updateOutdatedModState(List.of());
+            return;
+        }
+        List<Path> removableMods = findAllRemovableModFiles(modsDir);
+        if (removableMods.isEmpty()) {
+            updateOutdatedModState(List.of());
+            return;
+        }
+        List<Path> pending = new ArrayList<>();
+        for (Path path : removableMods) {
+            try {
+                Files.deleteIfExists(path);
+            } catch (IOException e) {
+                pending.add(path);
+            }
+        }
+        if (!pending.isEmpty()) {
+            LOGGER.warn("A frissítéshez szükséges modok nem törölhetők futás közben, kilépés után törlődnek: {}",
+                    formatFileList(pending));
+            scheduleDeleteAfterExit(pending);
+        }
+        updateOutdatedModState(filterExistingPaths(outdatedMods));
+    }
+
     private static List<Path> findExtraModFiles(Path modsDir) {
         List<Path> extraMods = new ArrayList<>();
         if (Files.notExists(modsDir)) {
@@ -327,6 +379,64 @@ public final class ModInstaller {
             LOGGER.warn("Nem sikerült beolvasni a modok mappáját: {}", modsDir, e);
         }
         return extraMods;
+    }
+
+    private static List<Path> findOutdatedModFiles(Path modsDir) {
+        List<InstalledModFile> installedMods = scanInstalledModFiles(modsDir);
+        if (installedMods.isEmpty()) {
+            return List.of();
+        }
+
+        Set<Path> outdatedMods = new LinkedHashSet<>();
+        for (RequiredMod mod : REQUIRED_MODS) {
+            if (hasVersionOverrideForCurrentVersion(mod.slug)) {
+                continue;
+            }
+
+            List<InstalledModFile> matchingFiles = findInstalledModFiles(installedMods, mod.modId);
+            if (matchingFiles.isEmpty()) {
+                continue;
+            }
+
+            ModrinthLookup lookup = fetchLatestVersion(mod.slug);
+            if (lookup == null || lookup.version == null) {
+                continue;
+            }
+
+            String expectedVersion = normalizeValue(lookup.version.version_number);
+            String expectedFilename = null;
+            ModrinthFile file = pickPrimaryFile(lookup.version);
+            if (file != null) {
+                expectedFilename = normalizeValue(file.filename);
+            }
+            if (expectedVersion == null && expectedFilename == null) {
+                continue;
+            }
+
+            for (InstalledModFile installed : matchingFiles) {
+                if (!matchesExpectedMod(installed, expectedVersion, expectedFilename)) {
+                    outdatedMods.add(installed.path);
+                }
+            }
+        }
+        return List.copyOf(outdatedMods);
+    }
+
+    private static List<Path> findAllRemovableModFiles(Path modsDir) {
+        List<Path> removableMods = new ArrayList<>();
+        if (Files.notExists(modsDir)) {
+            return removableMods;
+        }
+        Set<Path> selfPaths = getSelfPaths();
+        try (Stream<Path> stream = Files.list(modsDir)) {
+            stream.filter(path -> path.getFileName().toString().endsWith(".jar"))
+                    .map(path -> path.toAbsolutePath().normalize())
+                    .filter(path -> !selfPaths.contains(path))
+                    .forEach(removableMods::add);
+        } catch (IOException e) {
+            LOGGER.warn("Nem sikerült beolvasni a modok mappáját: {}", modsDir, e);
+        }
+        return removableMods;
     }
 
     private static boolean isExtraModFile(Path jarPath, Set<Path> selfPaths) {
@@ -344,6 +454,34 @@ public final class ModInstaller {
             }
         }
         return true;
+    }
+
+    private static List<InstalledModFile> findInstalledModFiles(List<InstalledModFile> installedMods, String modId) {
+        List<InstalledModFile> matches = new ArrayList<>();
+        for (InstalledModFile installed : installedMods) {
+            if (installed.ids.contains(modId)) {
+                matches.add(installed);
+            }
+        }
+        return matches;
+    }
+
+    private static boolean matchesExpectedMod(InstalledModFile installed, String expectedVersion, String expectedFilename) {
+        if (installed == null) {
+            return false;
+        }
+        String installedFilename = null;
+        if (installed.path != null && installed.path.getFileName() != null) {
+            installedFilename = normalizeValue(installed.path.getFileName().toString());
+        }
+        if (expectedFilename != null && installedFilename != null) {
+            return expectedFilename.equalsIgnoreCase(installedFilename);
+        }
+        String installedVersion = normalizeValue(installed.version);
+        if (expectedVersion != null && installedVersion != null) {
+            return expectedVersion.equals(installedVersion);
+        }
+        return false;
     }
 
     private static Set<Path> getSelfPaths() {
@@ -372,7 +510,34 @@ public final class ModInstaller {
         return found;
     }
 
+    private static List<InstalledModFile> scanInstalledModFiles(Path modsDir) {
+        List<InstalledModFile> found = new ArrayList<>();
+        if (Files.notExists(modsDir)) {
+            return found;
+        }
+        try (Stream<Path> stream = Files.list(modsDir)) {
+            stream.filter(path -> path.getFileName().toString().endsWith(".jar"))
+                    .forEach(path -> readInstalledModFile(path).ifPresent(found::add));
+        } catch (IOException e) {
+            LOGGER.warn("Nem sikerült beolvasni a modok mappáját: {}", modsDir, e);
+        }
+        return found;
+    }
+
     private static Optional<Set<String>> readModIds(Path jarPath) {
+        return readFabricModJson(jarPath).map(ModInstaller::extractModIds);
+    }
+
+    private static Optional<InstalledModFile> readInstalledModFile(Path jarPath) {
+        return readFabricModJson(jarPath)
+                .map(mod -> new InstalledModFile(
+                        jarPath.toAbsolutePath().normalize(),
+                        Set.copyOf(extractModIds(mod)),
+                        normalizeValue(mod.version)
+                ));
+    }
+
+    private static Optional<FabricModJson> readFabricModJson(Path jarPath) {
         try (ZipFile zip = new ZipFile(jarPath.toFile())) {
             ZipEntry entry = zip.getEntry("fabric.mod.json");
             if (entry == null) {
@@ -384,23 +549,27 @@ public final class ModInstaller {
                 if (mod == null || mod.id == null || mod.id.isBlank()) {
                     return Optional.empty();
                 }
-                Set<String> ids = new HashSet<>();
-                ids.add(mod.id);
-                if (mod.provides != null) {
-                    for (String provided : mod.provides) {
-                        if (provided != null && !provided.isBlank()) {
-                            ids.add(provided);
-                        }
-                    }
-                }
-                return Optional.of(ids);
+                return Optional.of(mod);
             }
         } catch (IOException e) {
             return Optional.empty();
         }
     }
 
-    private static void scheduleDeleteAfterExit(List<Path> paths) {
+    private static Set<String> extractModIds(FabricModJson mod) {
+        Set<String> ids = new HashSet<>();
+        ids.add(mod.id);
+        if (mod.provides != null) {
+            for (String provided : mod.provides) {
+                if (provided != null && !provided.isBlank()) {
+                    ids.add(provided);
+                }
+            }
+        }
+        return ids;
+    }
+
+    static void scheduleDeleteAfterExit(List<Path> paths) {
         if (paths.isEmpty()) {
             return;
         }
@@ -418,7 +587,7 @@ public final class ModInstaller {
                 new ProcessBuilder("sh", "-c", script).start();
             }
         } catch (IOException e) {
-            LOGGER.warn("Nem sikerült ütemezni az extra modok törlését.", e);
+            LOGGER.warn("Nem sikerült ütemezni a modok törlését.", e);
         }
     }
 
@@ -488,7 +657,7 @@ public final class ModInstaller {
         builder.append("  for ($i = 0; $i -lt ").append(DELETE_RETRY_COUNT).append("; $i++) {\n");
         builder.append("    if (ErrorTimeoutReached) { exit 0 }\n");
         builder.append("    if (-not (Test-Path -LiteralPath $p)) { $deleted = $true; break }\n");
-        builder.append("    try { Remove-Item -LiteralPath $p -Force -ErrorAction Stop; $deleted = $true; break }");
+        builder.append("    try { Remove-Item -LiteralPath $p -Force -Recurse -ErrorAction Stop; $deleted = $true; break }");
         builder.append(" catch { StartErrorTimeout; Start-Sleep -Milliseconds ").append(DELETE_RETRY_DELAY_MS).append(" }\n");
         builder.append("  }\n");
         builder.append("  if (-not $deleted) { StartErrorTimeout }\n");
@@ -544,7 +713,7 @@ public final class ModInstaller {
         builder.append("for ($i=0; $i -lt ").append(DELETE_RETRY_COUNT).append("; $i++) { ");
         builder.append("if (ErrorTimeoutReached) { exit }; ");
         builder.append("if (-not (Test-Path -LiteralPath $p)) { $deleted=$true; break }; ");
-        builder.append("try { Remove-Item -LiteralPath $p -Force -ErrorAction Stop; $deleted=$true; break } ");
+        builder.append("try { Remove-Item -LiteralPath $p -Force -Recurse -ErrorAction Stop; $deleted=$true; break } ");
         builder.append("catch { StartErrorTimeout; Start-Sleep -Milliseconds ").append(DELETE_RETRY_DELAY_MS).append(" } ");
         builder.append("}; ");
         builder.append("if (-not $deleted) { StartErrorTimeout }; ");
@@ -562,7 +731,7 @@ public final class ModInstaller {
         builder.append("if [ $((now-start)) -ge $timeout ]; then break; fi; ");
         builder.append("sleep 0.5; ");
         builder.append("done; ");
-        builder.append("rm -f");
+        builder.append("rm -rf");
         for (Path path : paths) {
             builder.append(" '").append(escapeSh(path.toString())).append("'");
         }
@@ -575,6 +744,39 @@ public final class ModInstaller {
 
     private static String escapeSh(String value) {
         return value.replace("'", "'\\''");
+    }
+
+    private static String normalizeValue(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private static List<Path> filterExistingPaths(List<Path> paths) {
+        List<Path> existing = new ArrayList<>();
+        for (Path path : paths) {
+            if (path != null && Files.exists(path)) {
+                existing.add(path.toAbsolutePath().normalize());
+            }
+        }
+        return existing;
+    }
+
+    private static void updateOutdatedModState(List<Path> paths) {
+        List<Path> normalized = new ArrayList<>();
+        Set<Path> unique = new LinkedHashSet<>();
+        for (Path path : paths) {
+            if (path == null) {
+                continue;
+            }
+            Path normalizedPath = path.toAbsolutePath().normalize();
+            if (unique.add(normalizedPath)) {
+                normalized.add(normalizedPath);
+            }
+        }
+        detectedOutdatedModFiles = List.copyOf(normalized);
+        outdatedModsDetected = !normalized.isEmpty();
     }
 
     private static String formatFileList(List<Path> paths) {
@@ -767,6 +969,18 @@ public final class ModInstaller {
         return null;
     }
 
+    private static boolean hasVersionOverrideForCurrentVersion(String slug) {
+        if (slug == null || slug.isBlank()) {
+            return false;
+        }
+        for (VersionOverride override : VERSION_OVERRIDES) {
+            if (override.matches(GAME_VERSION, slug)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static ModrinthFile pickPrimaryFile(ModrinthVersion version) {
         if (version == null || version.files == null || version.files.isEmpty()) {
             return null;
@@ -893,8 +1107,21 @@ public final class ModInstaller {
         private boolean primary;
     }
 
+    private static final class InstalledModFile {
+        private final Path path;
+        private final Set<String> ids;
+        private final String version;
+
+        private InstalledModFile(Path path, Set<String> ids, String version) {
+            this.path = path;
+            this.ids = ids;
+            this.version = version;
+        }
+    }
+
     private static final class FabricModJson {
         private String id;
+        private String version;
         private List<String> provides;
     }
 }

@@ -2,6 +2,8 @@ package hu.ColorsASD.minewild.mixin.client;
 
 import hu.ColorsASD.minewild.client.ClientCompat;
 import hu.ColorsASD.minewild.client.ClientExitOnDisconnect;
+import hu.ColorsASD.minewild.client.OutdatedModsScreen;
+import hu.ColorsASD.minewild.client.OutdatedShaderScreen;
 import hu.ColorsASD.minewild.client.RestartRequiredScreen;
 import hu.ColorsASD.minewild.client.ShaderPreferenceScreen;
 import hu.ColorsASD.minewild.installer.ModInstaller;
@@ -28,8 +30,13 @@ public abstract class TitleScreenMixin extends Screen {
     private void minewild$init(CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (ModInstaller.isRestartRequired()) {
-            if (!(client.currentScreen instanceof RestartRequiredScreen)) {
-                client.setScreen(new RestartRequiredScreen());
+            minewild$openRequiredScreen(client);
+            ci.cancel();
+            return;
+        }
+        if (ShaderPackInstaller.hasOutdatedShaderDetected()) {
+            if (!(client.currentScreen instanceof OutdatedShaderScreen)) {
+                client.setScreen(new OutdatedShaderScreen());
             }
             ci.cancel();
             return;
@@ -42,6 +49,20 @@ public abstract class TitleScreenMixin extends Screen {
         }
     }
 
+    @Inject(method = "tick", at = @At("HEAD"), require = 0)
+    private void minewild$showRequiredScreenWhenReady(CallbackInfo ci) {
+        if (!ModInstaller.isRestartRequired()) {
+            if (!ShaderPackInstaller.hasOutdatedShaderDetected()) {
+                return;
+            }
+            if (!(MinecraftClient.getInstance().currentScreen instanceof OutdatedShaderScreen)) {
+                MinecraftClient.getInstance().setScreen(new OutdatedShaderScreen());
+            }
+            return;
+        }
+        minewild$openRequiredScreen(MinecraftClient.getInstance());
+    }
+
     @Inject(method = "render", at = @At("HEAD"), cancellable = true, require = 0)
     private void minewild$hidePanoramaDuringShutdown(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
         if (!ClientExitOnDisconnect.isShutdownRequested()) {
@@ -52,5 +73,20 @@ public abstract class TitleScreenMixin extends Screen {
         }
         ClientCompat.disablePanorama();
         ci.cancel();
+    }
+
+    private void minewild$openRequiredScreen(MinecraftClient client) {
+        if (client == null) {
+            return;
+        }
+        if (ModInstaller.hasOutdatedModsDetected() && !ModInstaller.hasExtraModsDetected()) {
+            if (!(client.currentScreen instanceof OutdatedModsScreen)) {
+                client.setScreen(new OutdatedModsScreen());
+            }
+            return;
+        }
+        if (!(client.currentScreen instanceof RestartRequiredScreen)) {
+            client.setScreen(new RestartRequiredScreen());
+        }
     }
 }

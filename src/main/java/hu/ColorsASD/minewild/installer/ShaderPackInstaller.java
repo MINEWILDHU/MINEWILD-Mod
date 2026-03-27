@@ -23,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -68,11 +69,15 @@ public final class ShaderPackInstaller {
     private static final Object SHADER_CHOICE_LOCK = new Object();
     private static volatile boolean shaderChoiceLoaded = false;
     private static volatile Boolean cachedShaderEnabledChoice = null;
+    private static volatile boolean outdatedShaderDetected = false;
+    private static volatile List<Path> detectedOutdatedShaderArtifacts = List.of();
 
     private ShaderPackInstaller() {
     }
 
     public static void beginInstallIfNeeded() {
+        outdatedShaderDetected = false;
+        detectedOutdatedShaderArtifacts = List.of();
         Boolean shaderEnabledChoice = getShaderEnabledChoice();
         if (Boolean.FALSE.equals(shaderEnabledChoice)) {
             applyIrisDisabledSettings();
@@ -84,6 +89,10 @@ public final class ShaderPackInstaller {
         return getShaderEnabledChoice() != null;
     }
 
+    public static boolean hasOutdatedShaderDetected() {
+        return outdatedShaderDetected;
+    }
+
     public static void applyUserPreference(boolean enabled) {
         storeShaderEnabledChoice(enabled);
         startInstallWorker();
@@ -92,6 +101,11 @@ public final class ShaderPackInstaller {
             return;
         }
         applyIrisDisabledSettings();
+    }
+
+    public static void requestOutdatedShaderDeletion() {
+        Path shaderpacksDir = FabricLoader.getInstance().getGameDir().resolve(SHADERPACK_DIR);
+        removeOutdatedShaders(shaderpacksDir);
     }
 
     private static void startInstallWorker() {
@@ -141,6 +155,13 @@ public final class ShaderPackInstaller {
             return;
         }
 
+        List<Path> outdatedShaders = findOutdatedShaderArtifacts(shaderpacksDir, file.filename);
+        updateOutdatedShaderState(outdatedShaders);
+        if (!outdatedShaders.isEmpty()) {
+            LOGGER.info("Elavult shader csomag érzékelve: {}", formatPathList(outdatedShaders));
+            return;
+        }
+
         Path target = shaderpacksDir.resolve(file.filename);
         if (Files.notExists(target)) {
             if (!downloadTo(file.url, target)) {
@@ -151,6 +172,124 @@ public final class ShaderPackInstaller {
         String preferredShaderPack = waitForPreferredShaderPack(shaderpacksDir, file.filename);
         applyPreferenceForShaderPack(shaderpacksDir, preferredShaderPack);
         startFollowUpWatch(shaderpacksDir, preferredShaderPack);
+    }
+
+    private static void removeOutdatedShaders(Path shaderpacksDir) {
+        List<Path> outdatedShaders = detectedOutdatedShaderArtifacts;
+        if (outdatedShaders.isEmpty()) {
+            outdatedShaders = findAllManagedShaderArtifacts(shaderpacksDir);
+        }
+        if (outdatedShaders.isEmpty()) {
+            updateOutdatedShaderState(List.of());
+            return;
+        }
+        List<Path> pending = new ArrayList<>();
+        for (Path path : outdatedShaders) {
+            try {
+                deleteShaderArtifact(path);
+            } catch (IOException e) {
+                pending.add(path);
+            }
+        }
+        if (!pending.isEmpty()) {
+            LOGGER.warn("A shader frissítéséhez szükséges fájlok nem törölhetők futás közben, kilépés után törlődnek: {}",
+                    formatPathList(pending));
+            ModInstaller.scheduleDeleteAfterExit(pending);
+        }
+        updateOutdatedShaderState(filterExistingPaths(outdatedShaders));
+    }
+
+    private static List<Path> findOutdatedShaderArtifacts(Path shaderpacksDir, String latestBaseFilename) {
+        List<Path> managedShaderPacks = findManagedShaderPackPaths(shaderpacksDir);
+        if (managedShaderPacks.isEmpty()) {
+            return List.of();
+        }
+
+        String expectedBaseName = normalizeShaderName(latestBaseFilename);
+        String expectedBaseDirectory = stripZipSuffix(expectedBaseName);
+        String expectedPatchedName = normalizeShaderName(buildExpectedPatchedShaderPackName(latestBaseFilename));
+        String expectedPatchedZip = expectedPatchedName.endsWith(".zip") ? expectedPatchedName : expectedPatchedName + ".zip";
+
+        List<Path> outdated = new ArrayList<>();
+        for (Path path : managedShaderPacks) {
+            String currentName = normalizeShaderName(path.getFileName().toString());
+            if (currentName.equals(expectedBaseName)
+                    || currentName.equals(expectedBaseDirectory)
+                    || currentName.equals(expectedPatchedName)
+                    || currentName.equals(expectedPatchedZip)) {
+                continue;
+            }
+            outdated.add(path);
+        }
+        return outdated;
+    }
+
+    private static List<Path> findManagedShaderPackPaths(Path shaderpacksDir) {
+        List<Path> managedPaths = new ArrayList<>();
+        if (Files.notExists(shaderpacksDir)) {
+            return managedPaths;
+        }
+        try (Stream<Path> stream = Files.list(shaderpacksDir)) {
+            stream.filter(ShaderPackInstaller::isManagedShaderPackPath)
+                    .forEach(managedPaths::add);
+        } catch (IOException e) {
+            LOGGER.warn("Nem sikerült beolvasni a shaderpacks mappát: {}", shaderpacksDir, e);
+        }
+        return managedPaths;
+    }
+
+    private static List<Path> findAllManagedShaderArtifacts(Path shaderpacksDir) {
+        List<Path> managedPaths = new ArrayList<>();
+        if (Files.notExists(shaderpacksDir)) {
+            return managedPaths;
+        }
+        try (Stream<Path> stream = Files.list(shaderpacksDir)) {
+            stream.filter(ShaderPackInstaller::isManagedShaderArtifact)
+                    .forEach(managedPaths::add);
+        } catch (IOException e) {
+            LOGGER.warn("Nem sikerült beolvasni a shaderpacks mappát: {}", shaderpacksDir, e);
+        }
+        return managedPaths;
+    }
+
+    private static boolean isManagedShaderPackPath(Path path) {
+        if (!isShaderPackPath(path)) {
+            return false;
+        }
+        String name = normalizeShaderName(path.getFileName().toString());
+        return name.startsWith(SHADER_FILENAME_PREFIX) || name.contains(EUPHORIA_SHADER_NAME_TOKEN);
+    }
+
+    private static boolean isManagedShaderArtifact(Path path) {
+        if (isManagedShaderPackPath(path)) {
+            return true;
+        }
+        if (!Files.isRegularFile(path)) {
+            return false;
+        }
+        String name = normalizeShaderName(path.getFileName().toString());
+        if (!name.endsWith(".txt")) {
+            return false;
+        }
+        String baseName = name.substring(0, name.length() - 4);
+        return baseName.startsWith(SHADER_FILENAME_PREFIX) || baseName.contains(EUPHORIA_SHADER_NAME_TOKEN);
+    }
+
+    private static void deleteShaderArtifact(Path path) throws IOException {
+        if (path == null || Files.notExists(path)) {
+            return;
+        }
+        if (!Files.isDirectory(path)) {
+            Files.deleteIfExists(path);
+            return;
+        }
+        List<Path> toDelete;
+        try (Stream<Path> stream = Files.walk(path)) {
+            toDelete = stream.sorted(Comparator.reverseOrder()).toList();
+        }
+        for (Path current : toDelete) {
+            Files.deleteIfExists(current);
+        }
     }
 
     private static void startFollowUpWatch(Path shaderpacksDir, String fallbackShaderPackFilename) {
@@ -586,6 +725,53 @@ public final class ShaderPackInstaller {
             return Boolean.FALSE;
         }
         return null;
+    }
+
+    private static void updateOutdatedShaderState(List<Path> paths) {
+        List<Path> normalized = new ArrayList<>();
+        for (Path path : paths) {
+            if (path == null) {
+                continue;
+            }
+            normalized.add(path.toAbsolutePath().normalize());
+        }
+        detectedOutdatedShaderArtifacts = List.copyOf(normalized);
+        outdatedShaderDetected = !normalized.isEmpty();
+    }
+
+    private static List<Path> filterExistingPaths(List<Path> paths) {
+        List<Path> existing = new ArrayList<>();
+        for (Path path : paths) {
+            if (path != null && Files.exists(path)) {
+                existing.add(path.toAbsolutePath().normalize());
+            }
+        }
+        return existing;
+    }
+
+    private static String formatPathList(List<Path> paths) {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < paths.size(); i++) {
+            if (i > 0) {
+                builder.append(", ");
+            }
+            builder.append(paths.get(i).getFileName());
+        }
+        return builder.toString();
+    }
+
+    private static String normalizeShaderName(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static String stripZipSuffix(String value) {
+        if (value == null || !value.endsWith(".zip")) {
+            return value;
+        }
+        return value.substring(0, value.length() - 4);
     }
 
     private static ShaderLookup fetchLatestVersion(String slug) {
