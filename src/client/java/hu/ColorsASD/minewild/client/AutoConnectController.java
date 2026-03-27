@@ -1,6 +1,7 @@
 package hu.ColorsASD.minewild.client;
 
 import hu.ColorsASD.minewild.installer.ModInstaller;
+import hu.ColorsASD.minewild.installer.OwnModUpdater;
 import hu.ColorsASD.minewild.installer.ShaderPackInstaller;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
@@ -18,6 +19,10 @@ public final class AutoConnectController {
 
     public static void tick(MinecraftClient client) {
         if (attempted || client == null) {
+            return;
+        }
+        if (OwnModUpdater.hasUpdateAvailable()) {
+            titleTicks = 0;
             return;
         }
         if (ModInstaller.isRestartRequired()) {
@@ -60,6 +65,9 @@ public final class AutoConnectController {
 
     public static boolean connectNow(MinecraftClient client) {
         if (client == null || attempted) {
+            return false;
+        }
+        if (OwnModUpdater.hasUpdateAvailable()) {
             return false;
         }
         if (!ShaderPackInstaller.hasUserPreference()) {

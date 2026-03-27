@@ -49,11 +49,7 @@ public class MinewildClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         applyAccessibilityDefaultsImmediately();
-        if (OwnModUpdater.beginUpdateIfNeeded()) {
-            MinecraftClient client = MinecraftClient.getInstance();
-            if (client != null) {
-                client.scheduleStop();
-            }
+        if (OwnModUpdater.beginCheckIfNeeded()) {
             return;
         }
         ModInstaller.beginInstallIfNeeded();

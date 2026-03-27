@@ -42,14 +42,23 @@ public final class OwnModUpdater {
     private static final int DELETE_RETRY_DELAY_MS = 500;
     private static final int DOWNLOAD_RETRY_COUNT = 5;
     private static final int DOWNLOAD_RETRY_DELAY_MS = 1_500;
+    private static volatile boolean updateAvailable = false;
+    private static volatile String latestVersionLabel = null;
+    private static volatile String latestJarFilename = null;
+    private static volatile String latestDownloadUrl = null;
 
     private OwnModUpdater() {
     }
 
-    public static boolean beginUpdateIfNeeded() {
+    public static boolean beginCheckIfNeeded() {
         if (!STARTED.compareAndSet(false, true)) {
-            return false;
+            return updateAvailable;
         }
+
+        updateAvailable = false;
+        latestVersionLabel = null;
+        latestJarFilename = null;
+        latestDownloadUrl = null;
 
         Optional<ModContainer> ownMod = FabricLoader.getInstance().getModContainer(OWN_MOD_ID);
         if (ownMod.isEmpty()) {
@@ -78,18 +87,32 @@ public final class OwnModUpdater {
             return false;
         }
 
+        latestVersionLabel = latestRelease.tag_name;
+        latestJarFilename = asset.name;
+        latestDownloadUrl = asset.browser_download_url;
+        updateAvailable = true;
+        LOGGER.info("Új saját mod verzió érzékelve: {} -> {}", currentVersion, latestVersion);
+        return true;
+    }
+
+    public static boolean hasUpdateAvailable() {
+        return updateAvailable;
+    }
+
+    public static String getLatestVersionLabel() {
+        return latestVersionLabel;
+    }
+
+    public static boolean requestUpdate() {
+        if (!updateAvailable || latestJarFilename == null || latestDownloadUrl == null) {
+            return false;
+        }
         Path gameDir = FabricLoader.getInstance().getGameDir();
         Path modsDir = gameDir.resolve(MODS_DIR);
         Path shaderpacksDir = gameDir.resolve(SHADERPACKS_DIR);
-        Path targetJar = modsDir.resolve(asset.name);
-
-        if (!startPowerShellUpdateProcess(ProcessHandle.current().pid(), modsDir, shaderpacksDir, targetJar,
-                asset.browser_download_url)) {
-            return false;
-        }
-
-        LOGGER.info("Saját mod frissítés ütemezve: {} -> {}", currentVersion, latestVersion);
-        return true;
+        Path targetJar = modsDir.resolve(latestJarFilename);
+        return startPowerShellUpdateProcess(ProcessHandle.current().pid(), modsDir, shaderpacksDir, targetJar,
+                latestDownloadUrl);
     }
 
     private static GitHubRelease fetchLatestRelease() {

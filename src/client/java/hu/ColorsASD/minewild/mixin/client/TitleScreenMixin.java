@@ -2,11 +2,13 @@ package hu.ColorsASD.minewild.mixin.client;
 
 import hu.ColorsASD.minewild.client.ClientCompat;
 import hu.ColorsASD.minewild.client.ClientExitOnDisconnect;
+import hu.ColorsASD.minewild.client.OwnModUpdateScreen;
 import hu.ColorsASD.minewild.client.OutdatedModsScreen;
 import hu.ColorsASD.minewild.client.OutdatedShaderScreen;
 import hu.ColorsASD.minewild.client.RestartRequiredScreen;
 import hu.ColorsASD.minewild.client.ShaderPreferenceScreen;
 import hu.ColorsASD.minewild.installer.ModInstaller;
+import hu.ColorsASD.minewild.installer.OwnModUpdater;
 import hu.ColorsASD.minewild.installer.ShaderPackInstaller;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -29,6 +31,13 @@ public abstract class TitleScreenMixin extends Screen {
     @Inject(method = "init", at = @At("HEAD"), cancellable = true)
     private void minewild$init(CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
+        if (OwnModUpdater.hasUpdateAvailable()) {
+            if (!(client.currentScreen instanceof OwnModUpdateScreen)) {
+                client.setScreen(new OwnModUpdateScreen());
+            }
+            ci.cancel();
+            return;
+        }
         if (ModInstaller.isRestartRequired()) {
             minewild$openRequiredScreen(client);
             ci.cancel();
@@ -51,6 +60,12 @@ public abstract class TitleScreenMixin extends Screen {
 
     @Inject(method = "tick", at = @At("HEAD"), require = 0)
     private void minewild$showRequiredScreenWhenReady(CallbackInfo ci) {
+        if (OwnModUpdater.hasUpdateAvailable()) {
+            if (!(MinecraftClient.getInstance().currentScreen instanceof OwnModUpdateScreen)) {
+                MinecraftClient.getInstance().setScreen(new OwnModUpdateScreen());
+            }
+            return;
+        }
         if (!ModInstaller.isRestartRequired()) {
             if (!ShaderPackInstaller.hasOutdatedShaderDetected()) {
                 return;
