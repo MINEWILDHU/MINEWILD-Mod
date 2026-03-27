@@ -2,6 +2,7 @@ package hu.ColorsASD.minewild.client;
 
 import net.fabricmc.api.ClientModInitializer;
 import hu.ColorsASD.minewild.installer.ModInstaller;
+import hu.ColorsASD.minewild.installer.OwnModUpdater;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.GameOptions;
 import net.minecraft.client.option.ParticlesMode;
@@ -48,6 +49,13 @@ public class MinewildClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         applyAccessibilityDefaultsImmediately();
+        if (OwnModUpdater.beginUpdateIfNeeded()) {
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client != null) {
+                client.scheduleStop();
+            }
+            return;
+        }
         ModInstaller.beginInstallIfNeeded();
         scheduleWindowIconUpdate();
         scheduleBaseSettings();
