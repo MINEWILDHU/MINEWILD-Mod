@@ -62,6 +62,16 @@ public final class ShaderPackInstaller {
     private static final String EUPHORIA_PATCH_SUFFIX = " + EuphoriaPatches_1.8.6";
     private static final String SHADER_PROPERTIES_ENTRY = "shaders/shaders.properties";
     private static final String POPULAR_PROFILE_KEY = "profile.POPULAR";
+    private static final Map<String, String> MINEWILD_SHADER_DEFAULTS = Map.ofEntries(
+            Map.entry("GENERATED_NORMALS", "true"),
+            Map.entry("GENERATED_NORMAL_MULT", "200"),
+            Map.entry("COATED_TEXTURES", "true"),
+            Map.entry("COATED_TEXTURE_MULT", "200"),
+            Map.entry("SELECT_OUTLINE", "4"),
+            Map.entry("WORLD_OUTLINE", "true"),
+            Map.entry("WORLD_OUTLINE_I", "1.00"),
+            Map.entry("WORLD_OUTLINE_THICKNESS", "3")
+    );
     private static final long PATCHED_SHADER_WAIT_MS = 45_000L;
     private static final long PATCHED_SHADER_POLL_MS = 1_000L;
     private static final long FOLLOW_UP_WATCH_MS = 30L * 60L * 1000L;
@@ -494,12 +504,17 @@ public final class ShaderPackInstaller {
         }
 
         popularSettings.forEach(properties::setProperty);
+        applyMinewildShaderDefaults(properties);
 
         try (OutputStream out = Files.newOutputStream(profileSettingsFile)) {
             properties.store(out, "Minewild Euphoria alapértelmezett beállítások");
         } catch (IOException e) {
             LOGGER.warn("Nem sikerült menteni a shaderprofil beállításait: {}", profileSettingsFile, e);
         }
+    }
+
+    private static void applyMinewildShaderDefaults(Properties properties) {
+        MINEWILD_SHADER_DEFAULTS.forEach(properties::setProperty);
     }
 
     private static Map<String, String> loadPopularProfileSettings(Path shaderpacksDir, String shaderPackFilename) {
