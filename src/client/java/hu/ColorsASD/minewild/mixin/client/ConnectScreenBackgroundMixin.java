@@ -104,12 +104,12 @@ public abstract class ConnectScreenBackgroundMixin extends Screen {
 
             Identifier texture = minewild$pickButtonTexture(button, mouseX, mouseY);
             ClientCompat.drawTexture(context, texture, x, y, w, h, 200, 20);
-            minewild$drawExitText1218(context, button, x, y, w, h);
+            minewild$drawExitText1216Through12111(context, button, x, y, w, h);
             return;
         }
     }
 
-    private void minewild$drawExitText1218(
+    private void minewild$drawExitText1216Through12111(
             DrawContext context,
             ButtonWidget button,
             int x,
@@ -117,9 +117,7 @@ public abstract class ConnectScreenBackgroundMixin extends Screen {
             int width,
             int height
     ) {
-        if (!ClientCompat.isMinecraft1218()
-                && !ClientCompat.isMinecraft1217()
-                && !ClientCompat.isMinecraft1216()) {
+        if (!ClientCompat.isMinecraft1216Through12111()) {
             return;
         }
         if (context == null || button == null) {

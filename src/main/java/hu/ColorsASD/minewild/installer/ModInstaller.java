@@ -97,15 +97,18 @@ public final class ModInstaller {
             new RequiredMod("badoptimizations", "badoptimizations"),
             new RequiredMod("better-block-entities", "betterblockentities"),
             new RequiredMod("cloth-config", "cloth-config"),
-            new RequiredMod("polytone", "polytone"),
-            new RequiredMod("continuity", "continuity"),
+            // 1.21.9-hez jelenleg nincs külön Modrinth kiadás.
+            new RequiredMod("polytone", "polytone", Set.of("1.21.9")),
+            // 1.21.9-hez jelenleg nincs külön Modrinth kiadás.
+            new RequiredMod("continuity", "continuity", Set.of("1.21.9")),
             new RequiredMod("distanthorizons", "distanthorizons"),
             new RequiredMod("entityculling", "entityculling"),
             new RequiredMod("entitytexturefeatures", "entity_texture_features"),
             new RequiredMod("entity-model-features", "entity_model_features"),
             new RequiredMod("ferrite-core", "ferritecore"),
             new RequiredMod("immediatelyfast", "immediatelyfast"),
-            new RequiredMod("indium", "indium"),
+            // 1.21.9-1.21.11-hez nincs Indium kiadás, ezért csak az új verzióknál hagyjuk ki.
+            new RequiredMod("indium", "indium", Set.of("1.21.9", "1.21.10", "1.21.11")),
             new RequiredMod("iris", "iris"),
             new RequiredMod("euphoria-patches", "euphoria_patcher"),
             new RequiredMod("lithium", "lithium"),
@@ -206,6 +209,9 @@ public final class ModInstaller {
 
     private static boolean areAllModsLoaded() {
         for (RequiredMod mod : REQUIRED_MODS) {
+            if (!mod.isRequiredForCurrentGameVersion()) {
+                continue;
+            }
             if (!FabricLoader.getInstance().isModLoaded(mod.modId)) {
                 return false;
             }
@@ -243,6 +249,9 @@ public final class ModInstaller {
         Set<String> existingIds = scanInstalledModIds(modsDir);
         List<RequiredMod> missingMods = new ArrayList<>();
         for (RequiredMod mod : REQUIRED_MODS) {
+            if (!mod.isRequiredForCurrentGameVersion()) {
+                continue;
+            }
             if (FabricLoader.getInstance().isModLoaded(mod.modId)) {
                 continue;
             }
@@ -389,6 +398,9 @@ public final class ModInstaller {
 
         Set<Path> outdatedMods = new LinkedHashSet<>();
         for (RequiredMod mod : REQUIRED_MODS) {
+            if (!mod.isRequiredForCurrentGameVersion()) {
+                continue;
+            }
             if (hasVersionOverrideForCurrentVersion(mod.slug)) {
                 continue;
             }
@@ -1047,10 +1059,20 @@ public final class ModInstaller {
     private static final class RequiredMod {
         private final String slug;
         private final String modId;
+        private final Set<String> skippedGameVersions;
 
         private RequiredMod(String slug, String modId) {
+            this(slug, modId, Set.of());
+        }
+
+        private RequiredMod(String slug, String modId, Set<String> skippedGameVersions) {
             this.slug = slug;
             this.modId = modId;
+            this.skippedGameVersions = skippedGameVersions == null ? Set.of() : Set.copyOf(skippedGameVersions);
+        }
+
+        private boolean isRequiredForCurrentGameVersion() {
+            return !skippedGameVersions.contains(GAME_VERSION);
         }
     }
 

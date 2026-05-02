@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Minecraft-1.20.1--1.21.8-3C8527?style=for-the-badge&logo=minecraft&logoColor=white" alt="Minecraft badge">
+  <img src="https://img.shields.io/badge/Minecraft-1.20.1--1.21.11-3C8527?style=for-the-badge&logo=minecraft&logoColor=white" alt="Minecraft badge">
   <img src="https://img.shields.io/badge/Loader-Fabric-DBD0B4?style=for-the-badge" alt="Fabric badge">
   <img src="https://img.shields.io/badge/Side-Client%20Only-1F2328?style=for-the-badge" alt="Client-side badge">
   <img src="https://img.shields.io/badge/License-All%20Rights%20Reserved-8B3A3A?style=for-the-badge" alt="License badge">
@@ -67,7 +67,7 @@ A projekt több kliensképernyőt és gombkiosztást is átír:
 
 ## Támogatott Környezet
 
-- Minecraft: `1.20.1` - `1.21.8`
+- Minecraft: `1.20.1` - `1.21.11`
 - Fabric Loader: `>= 0.18.4`
 - Környezet: `client`
 - Build target: `Java 17`

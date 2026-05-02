@@ -108,8 +108,8 @@ public final class ClientExitOnDisconnect {
                 return;
             }
             ButtonWidget.PressAction exitAction = createExitAction();
-            if (ClientCompat.isMinecraft1218() || ClientCompat.isMinecraft1217() || ClientCompat.isMinecraft1216()) {
-                // 1.21.6/1.21.7/1.21.8-on a replacement path néha láthatatlan/hide state-be fut,
+            if (ClientCompat.isMinecraft1216Through12111()) {
+                // 1.21.6-1.21.11-en a replacement path néha láthatatlan/hide state-be fut,
                 // ezért a meglévő gombot írjuk át biztosan látható kilépés gombra.
                 writePressAction(button, exitAction);
                 button.setMessage(EXIT_LABEL);

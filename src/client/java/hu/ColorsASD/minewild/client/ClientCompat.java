@@ -176,6 +176,10 @@ public final class ClientCompat {
         return isMinecraftAtLeast(1, 21, 6);
     }
 
+    public static boolean isMinecraft1216Through12111() {
+        return isMinecraftAtLeast(1, 21, 6) && isMinecraftAtMost(1, 21, 11);
+    }
+
     public static boolean isMinecraft1216() {
         return isMinecraftAtLeast(1, 21, 6) && isMinecraftAtMost(1, 21, 6);
     }
@@ -186,6 +190,18 @@ public final class ClientCompat {
 
     public static boolean isMinecraft1218() {
         return isMinecraftAtLeast(1, 21, 8) && isMinecraftAtMost(1, 21, 8);
+    }
+
+    public static boolean isMinecraft1219() {
+        return isMinecraftAtLeast(1, 21, 9) && isMinecraftAtMost(1, 21, 9);
+    }
+
+    public static boolean isMinecraft12110() {
+        return isMinecraftAtLeast(1, 21, 10) && isMinecraftAtMost(1, 21, 10);
+    }
+
+    public static boolean isMinecraft12111() {
+        return isMinecraftAtLeast(1, 21, 11) && isMinecraftAtMost(1, 21, 11);
     }
 
     public static boolean isMinecraft1211OrAbove() {
