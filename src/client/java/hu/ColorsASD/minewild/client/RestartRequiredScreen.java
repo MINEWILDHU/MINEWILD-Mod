@@ -87,7 +87,7 @@ public class RestartRequiredScreen extends Screen {
         }
 
         actionButton = this.addDrawableChild(
-                MinewildButtonWidget.create(
+                MinewildButtonWidgets.create(
                         getActionLabel(ModInstaller.hasExtraModsDetected()),
                         button -> handleAction(),
                         x,

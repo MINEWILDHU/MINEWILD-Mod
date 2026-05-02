@@ -69,7 +69,7 @@ public class ShaderPreferenceScreen extends Screen {
         }
 
         this.addDrawableChild(
-                MinewildButtonWidget.create(
+                MinewildButtonWidgets.create(
                         BUTTON_YES,
                         button -> handleChoice(true),
                         buttonsX,
@@ -80,7 +80,7 @@ public class ShaderPreferenceScreen extends Screen {
         );
 
         this.addDrawableChild(
-                MinewildButtonWidget.create(
+                MinewildButtonWidgets.create(
                         BUTTON_NO,
                         button -> handleChoice(false),
                         buttonsX + buttonWidth + BUTTON_GAP,

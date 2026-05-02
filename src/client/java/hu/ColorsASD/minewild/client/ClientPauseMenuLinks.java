@@ -62,7 +62,7 @@ public final class ClientPauseMenuLinks {
     }
 
     public static ButtonWidget createWebstoreButton(int x, int y, int width, int height) {
-        ButtonWidget button = MinewildButtonWidget.create(
+        ButtonWidget button = MinewildButtonWidgets.create(
                 Text.literal(WEBSTORE_LABEL),
                 pressed -> openExternalUrl(WEBSTORE_URL),
                 x,

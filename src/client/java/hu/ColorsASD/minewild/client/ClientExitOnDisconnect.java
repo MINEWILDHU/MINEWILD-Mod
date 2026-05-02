@@ -144,7 +144,7 @@ public final class ClientExitOnDisconnect {
         if (screen == null || original == null || action == null) {
             return false;
         }
-        ButtonWidget replacement = MinewildButtonWidget.create(
+        ButtonWidget replacement = MinewildButtonWidgets.create(
                 EXIT_LABEL,
                 action,
                 original.getX(),
