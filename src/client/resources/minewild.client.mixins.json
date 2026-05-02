@@ -13,6 +13,7 @@
     "DisconnectedScreenMixin",
     "DownloadingTerrainScreenBackgroundMixin",
     "GameMenuScreenMixin",
+    "LevelLoadingScreenBackgroundMixin",
     "MinecraftClientMixin",
     "ProgressScreenBackgroundMixin",
     "ScreenInvokerMixin",

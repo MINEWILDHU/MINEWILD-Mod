@@ -1,5 +1,6 @@
 package hu.ColorsASD.minewild.prelaunch;
 
+import hu.ColorsASD.minewild.installer.ModInstaller;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
 import org.slf4j.Logger;
@@ -18,6 +19,7 @@ public final class MinewildPreLaunch implements PreLaunchEntrypoint {
 
     @Override
     public void onPreLaunch() {
+        ModInstaller.cleanupOutdatedModsBeforeLoading();
         disableDhUpdaterBeforeModsInit();
     }
 

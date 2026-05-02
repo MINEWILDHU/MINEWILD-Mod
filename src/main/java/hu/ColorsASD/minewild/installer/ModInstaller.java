@@ -136,6 +136,7 @@ public final class ModInstaller {
     private static volatile boolean downloadFailed = false;
     private static volatile boolean extraModsDetected = false;
     private static volatile boolean outdatedModsDetected = false;
+    private static volatile boolean preLaunchOutdatedCleanupPerformed = false;
     private static volatile List<Path> detectedOutdatedModFiles = List.of();
 
     private ModInstaller() {
@@ -146,6 +147,7 @@ public final class ModInstaller {
             return;
         }
 
+        boolean preLaunchCleanup = preLaunchOutdatedCleanupPerformed;
         ShaderPackInstaller.beginInstallIfNeeded();
         ensureDistantHorizonsUpdaterDisabled();
 
@@ -154,15 +156,17 @@ public final class ModInstaller {
         downloadInProgress = false;
         downloadFailed = false;
         extraModsDetected = false;
-        outdatedModsDetected = false;
-        detectedOutdatedModFiles = List.of();
+        if (!preLaunchCleanup) {
+            outdatedModsDetected = false;
+            detectedOutdatedModFiles = List.of();
+        }
 
         Path modsDir = FabricLoader.getInstance().getGameDir().resolve("mods");
         boolean hasExtraMods = hasExtraMods(modsDir);
         if (hasExtraMods) {
             extraModsDetected = true;
         }
-        restartRequired = hasExtraMods || !areAllModsLoaded();
+        restartRequired = preLaunchCleanup || hasExtraMods || !areAllModsLoaded();
 
         Thread worker = new Thread(() -> inspectAndInstallMods(modsDir), "minewild-mod-installer");
         worker.setDaemon(true);
@@ -207,6 +211,30 @@ public final class ModInstaller {
         removeOutdatedMods(modsDir);
     }
 
+    public static void cleanupOutdatedModsBeforeLoading() {
+        Path modsDir = FabricLoader.getInstance().getGameDir().resolve("mods");
+        List<Path> outdatedMods = findOutdatedModFiles(modsDir);
+        if (outdatedMods.isEmpty()) {
+            updateOutdatedModState(List.of());
+            return;
+        }
+        List<Path> removableMods = findAllRemovableModFiles(modsDir);
+        if (removableMods.isEmpty()) {
+            updateOutdatedModState(outdatedMods);
+            restartRequired = true;
+            return;
+        }
+
+        preLaunchOutdatedCleanupPerformed = true;
+        restartRequired = true;
+        updateOutdatedModState(outdatedMods);
+        LOGGER.info("PreLaunch: elavult modok érzékelve, a frissítéshez szükséges modok törlése indul: {}",
+                formatFileList(outdatedMods));
+        deleteModFilesForRefresh(removableMods);
+        updateOutdatedModState(filterExistingPaths(outdatedMods));
+        stopAfterPreLaunchRefresh();
+    }
+
     private static boolean areAllModsLoaded() {
         for (RequiredMod mod : REQUIRED_MODS) {
             if (!mod.isRequiredForCurrentGameVersion()) {
@@ -220,6 +248,10 @@ public final class ModInstaller {
     }
 
     private static void inspectAndInstallMods(Path modsDir) {
+        if (preLaunchOutdatedCleanupPerformed) {
+            downloadMissingMods(modsDir, true);
+            return;
+        }
         if (!extraModsDetected) {
             List<Path> outdatedMods = findOutdatedModFiles(modsDir);
             updateOutdatedModState(outdatedMods);
@@ -233,6 +265,10 @@ public final class ModInstaller {
     }
 
     private static void downloadMissingMods(Path modsDir) {
+        downloadMissingMods(modsDir, false);
+    }
+
+    private static void downloadMissingMods(Path modsDir, boolean ignoreLoadedMods) {
         downloadTotal = 0;
         downloadDone = 0;
         downloadInProgress = false;
@@ -252,7 +288,7 @@ public final class ModInstaller {
             if (!mod.isRequiredForCurrentGameVersion()) {
                 continue;
             }
-            if (FabricLoader.getInstance().isModLoaded(mod.modId)) {
+            if (!ignoreLoadedMods && FabricLoader.getInstance().isModLoaded(mod.modId)) {
                 continue;
             }
             if (existingIds.contains(mod.modId)) {
@@ -358,6 +394,11 @@ public final class ModInstaller {
             updateOutdatedModState(List.of());
             return;
         }
+        deleteModFilesForRefresh(removableMods);
+        updateOutdatedModState(filterExistingPaths(outdatedMods));
+    }
+
+    private static void deleteModFilesForRefresh(List<Path> removableMods) {
         List<Path> pending = new ArrayList<>();
         for (Path path : removableMods) {
             try {
@@ -371,7 +412,11 @@ public final class ModInstaller {
                     formatFileList(pending));
             scheduleDeleteAfterExit(pending);
         }
-        updateOutdatedModState(filterExistingPaths(outdatedMods));
+    }
+
+    private static void stopAfterPreLaunchRefresh() {
+        LOGGER.info("PreLaunch: a modfrissítés előkészítve, a Minecraft újraindítása szükséges.");
+        System.exit(0);
     }
 
     private static List<Path> findExtraModFiles(Path modsDir) {

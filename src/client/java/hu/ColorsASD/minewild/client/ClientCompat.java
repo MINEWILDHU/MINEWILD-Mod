@@ -192,6 +192,10 @@ public final class ClientCompat {
         return isMinecraftAtLeast(1, 21, 8) && isMinecraftAtMost(1, 21, 8);
     }
 
+    public static boolean isMinecraft1219Through12111() {
+        return isMinecraftAtLeast(1, 21, 9) && isMinecraftAtMost(1, 21, 11);
+    }
+
     public static boolean isMinecraft1219() {
         return isMinecraftAtLeast(1, 21, 9) && isMinecraftAtMost(1, 21, 9);
     }
@@ -228,6 +232,11 @@ public final class ClientCompat {
                 || className.endsWith(".class_434")
                 || className.endsWith(".ReconfiguringScreen")
                 || className.endsWith(".class_8671")) {
+            return true;
+        }
+        if (isMinecraft1219Through12111()
+                && (className.endsWith(".LevelLoadingScreen")
+                || className.endsWith(".class_3928"))) {
             return true;
         }
         TextContent content = screen.getTitle().getContent();
