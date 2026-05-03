@@ -92,34 +92,7 @@ public final class ModInstaller {
     );
 
     private static final String OWN_MOD_ID = "minewild";
-    private static final List<RequiredMod> REQUIRED_MODS = List.of(
-            new RequiredMod("fabric-api", "fabric-api"),
-            new RequiredMod("badoptimizations", "badoptimizations"),
-            new RequiredMod("better-block-entities", "betterblockentities"),
-            new RequiredMod("cloth-config", "cloth-config"),
-            // 1.21.9-hez jelenleg nincs külön Modrinth kiadás.
-            new RequiredMod("polytone", "polytone", Set.of("1.21.9")),
-            // 1.21.9-hez jelenleg nincs külön Modrinth kiadás.
-            new RequiredMod("continuity", "continuity", Set.of("1.21.9")),
-            new RequiredMod("distanthorizons", "distanthorizons"),
-            new RequiredMod("entityculling", "entityculling"),
-            new RequiredMod("entitytexturefeatures", "entity_texture_features"),
-            new RequiredMod("entity-model-features", "entity_model_features"),
-            new RequiredMod("ferrite-core", "ferritecore"),
-            new RequiredMod("immediatelyfast", "immediatelyfast"),
-            // 1.21.9-1.21.11-hez nincs Indium kiadás, ezért csak az új verzióknál hagyjuk ki.
-            new RequiredMod("indium", "indium", Set.of("1.21.9", "1.21.10", "1.21.11")),
-            new RequiredMod("iris", "iris"),
-            new RequiredMod("euphoria-patches", "euphoria_patcher"),
-            new RequiredMod("lithium", "lithium"),
-            new RequiredMod("modernfix-mvus", "modernfix"),
-            new RequiredMod("moreculling", "moreculling"),
-            new RequiredMod("noxesium", "noxesium"),
-            new RequiredMod("reeses-sodium-options", "reeses-sodium-options"),
-            new RequiredMod("scalablelux", "scalablelux"),
-            new RequiredMod("sodium", "sodium"),
-            new RequiredMod("sodium-extra", "sodium-extra")
-    );
+    private static final List<RequiredMod> REQUIRED_MODS = buildRequiredMods();
     private static final Set<String> ALLOWED_MOD_IDS = buildAllowedModIds();
     private static final int DELETE_RETRY_COUNT = 20;
     private static final int DELETE_RETRY_DELAY_MS = 500;
@@ -140,6 +113,43 @@ public final class ModInstaller {
     private static volatile List<Path> detectedOutdatedModFiles = List.of();
 
     private ModInstaller() {
+    }
+
+    private static List<RequiredMod> buildRequiredMods() {
+        boolean sodiumFirst = "1.21.11".equals(GAME_VERSION);
+        List<RequiredMod> mods = new ArrayList<>();
+        mods.add(new RequiredMod("fabric-api", "fabric-api"));
+        if (sodiumFirst) {
+            mods.add(new RequiredMod("sodium", "sodium"));
+        }
+        mods.add(new RequiredMod("badoptimizations", "badoptimizations"));
+        mods.add(new RequiredMod("better-block-entities", "betterblockentities"));
+        mods.add(new RequiredMod("cloth-config", "cloth-config"));
+        // 1.21.9-hez jelenleg nincs külön Modrinth kiadás.
+        mods.add(new RequiredMod("polytone", "polytone", Set.of("1.21.9")));
+        // 1.21.9-hez jelenleg nincs külön Modrinth kiadás.
+        mods.add(new RequiredMod("continuity", "continuity", Set.of("1.21.9")));
+        mods.add(new RequiredMod("distanthorizons", "distanthorizons"));
+        mods.add(new RequiredMod("entityculling", "entityculling"));
+        mods.add(new RequiredMod("entitytexturefeatures", "entity_texture_features"));
+        mods.add(new RequiredMod("entity-model-features", "entity_model_features"));
+        mods.add(new RequiredMod("ferrite-core", "ferritecore"));
+        mods.add(new RequiredMod("immediatelyfast", "immediatelyfast"));
+        // 1.21.9-1.21.11-hez nincs Indium kiadás, ezért csak az új verzióknál hagyjuk ki.
+        mods.add(new RequiredMod("indium", "indium", Set.of("1.21.9", "1.21.10", "1.21.11")));
+        mods.add(new RequiredMod("iris", "iris"));
+        mods.add(new RequiredMod("euphoria-patches", "euphoria_patcher"));
+        mods.add(new RequiredMod("lithium", "lithium"));
+        mods.add(new RequiredMod("modernfix-mvus", "modernfix"));
+        mods.add(new RequiredMod("moreculling", "moreculling"));
+        mods.add(new RequiredMod("noxesium", "noxesium"));
+        mods.add(new RequiredMod("reeses-sodium-options", "reeses-sodium-options"));
+        mods.add(new RequiredMod("scalablelux", "scalablelux"));
+        if (!sodiumFirst) {
+            mods.add(new RequiredMod("sodium", "sodium"));
+        }
+        mods.add(new RequiredMod("sodium-extra", "sodium-extra"));
+        return List.copyOf(mods);
     }
 
     public static void beginInstallIfNeeded() {

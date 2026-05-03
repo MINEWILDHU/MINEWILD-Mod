@@ -7,6 +7,7 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.network.ServerAddress;
 import net.minecraft.client.network.ServerInfo;
+import net.minecraft.sound.SoundCategory;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.Map;
@@ -146,6 +147,8 @@ public final class ClientCompat {
     private static boolean tutorialStepFieldChecked;
     private static Method currentServerEntryMethod;
     private static boolean currentServerEntryMethodChecked;
+    private static Method soundVolumeUpdateMethod;
+    private static boolean soundVolumeUpdateMethodChecked;
     private static Field serverInfoAddressField;
     private static boolean serverInfoAddressFieldChecked;
 
@@ -342,6 +345,22 @@ public final class ClientCompat {
         } catch (IllegalAccessException | RuntimeException ignored) {
         }
         return false;
+    }
+
+    public static void updateSoundVolume(MinecraftClient client, SoundCategory category, float volume) {
+        if (client == null || category == null) {
+            return;
+        }
+        Object soundManager = client.getSoundManager();
+        Method method = getSoundVolumeUpdateMethod(soundManager);
+        if (method == null) {
+            return;
+        }
+        float normalizedVolume = Math.max(0.0f, Math.min(1.0f, volume));
+        try {
+            method.invoke(soundManager, category, normalizedVolume);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+        }
     }
 
     public static String tryGetCurrentServerAddress(MinecraftClient client) {
@@ -618,6 +637,45 @@ public final class ClientCompat {
         } catch (RuntimeException ignored) {
             return false;
         }
+    }
+
+    private static Method getSoundVolumeUpdateMethod(Object soundManager) {
+        if (soundManager == null) {
+            return null;
+        }
+        if (soundVolumeUpdateMethodChecked) {
+            return soundVolumeUpdateMethod;
+        }
+        soundVolumeUpdateMethodChecked = true;
+
+        Class<?> soundManagerClass = soundManager.getClass();
+        Method method = findSoundVolumeUpdateMethod(soundManagerClass.getDeclaredMethods());
+        if (method == null) {
+            method = findSoundVolumeUpdateMethod(soundManagerClass.getMethods());
+        }
+        soundVolumeUpdateMethod = method;
+        return soundVolumeUpdateMethod;
+    }
+
+    private static Method findSoundVolumeUpdateMethod(Method[] methods) {
+        if (methods == null) {
+            return null;
+        }
+        for (Method method : methods) {
+            if (method.getReturnType() != void.class) {
+                continue;
+            }
+            Class<?>[] params = method.getParameterTypes();
+            if (params.length != 2 || params[0] != SoundCategory.class || params[1] != float.class) {
+                continue;
+            }
+            try {
+                method.setAccessible(true);
+            } catch (RuntimeException ignored) {
+            }
+            return method;
+        }
+        return null;
     }
 
     private static Method getCurrentServerEntryMethod() {

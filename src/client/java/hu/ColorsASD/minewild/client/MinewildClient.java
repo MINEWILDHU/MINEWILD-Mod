@@ -270,7 +270,11 @@ public class MinewildClient implements ClientModInitializer {
         SimpleOption<Double> musicVolume = options.getSoundVolumeOption(SoundCategory.MUSIC);
         if (musicVolume.getValue() != 0.0) {
             musicVolume.setValue(0.0);
-            client.getSoundManager().updateSoundVolume(SoundCategory.MUSIC, 0.0f);
+            if (ClientCompat.isMinecraft12111()) {
+                ClientCompat.updateSoundVolume(client, SoundCategory.MUSIC, 0.0f);
+            } else {
+                client.getSoundManager().updateSoundVolume(SoundCategory.MUSIC, 0.0f);
+            }
             changed = true;
         }
 
