@@ -2,7 +2,7 @@ package hu.ColorsASD.minewild.mixin.client;
 
 import hu.ColorsASD.minewild.client.ClientCompat;
 import hu.ColorsASD.minewild.client.DisconnectedScreenLayoutBridge;
-import hu.ColorsASD.minewild.client.MinewildButtonWidget;
+import hu.ColorsASD.minewild.client.MinewildButtonWidgets;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.Element;
@@ -146,7 +146,7 @@ public abstract class DisconnectedScreenMixin extends Screen implements Disconne
         minewild$hideAllMenuButtons();
 
         if (supportButton == null) {
-            supportButton = MinewildButtonWidget.create(
+            supportButton = MinewildButtonWidgets.create(
                     SUPPORT_LABEL,
                     button -> openSupportPage(),
                     x,
@@ -160,7 +160,7 @@ public abstract class DisconnectedScreenMixin extends Screen implements Disconne
         }
 
         if (reconnectButton == null) {
-            reconnectButton = MinewildButtonWidget.create(
+            reconnectButton = MinewildButtonWidgets.create(
                     RECONNECT_LABEL,
                     button -> connectToMinewild(),
                     x,
@@ -174,7 +174,7 @@ public abstract class DisconnectedScreenMixin extends Screen implements Disconne
         }
 
         if (exitButton == null) {
-            exitButton = MinewildButtonWidget.create(
+            exitButton = MinewildButtonWidgets.create(
                     EXIT_LABEL,
                     button -> {
                         MinecraftClient client = MinecraftClient.getInstance();
