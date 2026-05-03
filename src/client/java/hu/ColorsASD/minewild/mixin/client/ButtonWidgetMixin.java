@@ -1,6 +1,5 @@
 package hu.ColorsASD.minewild.mixin.client;
 
-import hu.ColorsASD.minewild.client.ClientCompat;
 import hu.ColorsASD.minewild.client.ClientPauseMenuLinks;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import org.spongepowered.asm.mixin.Mixin;
@@ -12,22 +11,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class ButtonWidgetMixin {
     @Inject(method = "onPress", at = @At("HEAD"), cancellable = true, require = 0)
     private void minewild$openPauseMenuLinks(CallbackInfo ci) {
-        if (ClientPauseMenuLinks.handleButtonPress((ButtonWidget) (Object) this)) {
-            ci.cancel();
-        }
-    }
-
-    @Inject(
-            method = "method_25306(Lnet/minecraft/class_11907;)V",
-            at = @At("HEAD"),
-            cancellable = true,
-            remap = false,
-            require = 0
-    )
-    private void minewild$openPauseMenuLinks12111(Object inputContext, CallbackInfo ci) {
-        if (!ClientCompat.isMinecraft12111()) {
-            return;
-        }
         if (ClientPauseMenuLinks.handleButtonPress((ButtonWidget) (Object) this)) {
             ci.cancel();
         }
