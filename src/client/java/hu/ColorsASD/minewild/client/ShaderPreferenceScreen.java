@@ -139,7 +139,10 @@ public class ShaderPreferenceScreen extends Screen {
     }
 
     private void handleChoice(boolean enabled) {
-        ShaderPackInstaller.applyUserPreference(enabled);
+        String shaderPackFilename = ShaderPackInstaller.applyUserPreference(enabled);
+        if (enabled) {
+            ClientCompat.applyIrisRuntimeShaderSettings(shaderPackFilename);
+        }
         MinecraftClient client = MinecraftClient.getInstance();
         if (client != null && client.currentScreen == this) {
             client.setScreen(new TitleScreen());

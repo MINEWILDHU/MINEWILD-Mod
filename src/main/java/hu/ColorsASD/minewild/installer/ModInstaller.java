@@ -116,7 +116,9 @@ public final class ModInstaller {
     }
 
     private static List<RequiredMod> buildRequiredMods() {
-        boolean sodiumFirst = "1.21.11".equals(GAME_VERSION);
+        boolean sodiumFirst = "1.21.9".equals(GAME_VERSION)
+                || "1.21.10".equals(GAME_VERSION)
+                || "1.21.11".equals(GAME_VERSION);
         List<RequiredMod> mods = new ArrayList<>();
         mods.add(new RequiredMod("fabric-api", "fabric-api"));
         if (sodiumFirst) {

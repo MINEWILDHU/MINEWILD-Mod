@@ -363,6 +363,17 @@ public final class ClientCompat {
         }
     }
 
+    public static void applyIrisRuntimeShaderSettings(String shaderPackFilename) {
+        if (!isMinecraft12111() || shaderPackFilename == null || shaderPackFilename.isBlank()) {
+            return;
+        }
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null) {
+            return;
+        }
+        client.execute(() -> applyIrisRuntimeShaderSettingsNow(shaderPackFilename));
+    }
+
     public static String tryGetCurrentServerAddress(MinecraftClient client) {
         ServerInfo info = tryGetCurrentServerInfo(client);
         if (info == null) {
@@ -676,6 +687,24 @@ public final class ClientCompat {
             return method;
         }
         return null;
+    }
+
+    private static void applyIrisRuntimeShaderSettingsNow(String shaderPackFilename) {
+        try {
+            Class<?> irisClass = Class.forName("net.irisshaders.iris.Iris");
+            Object irisConfig = irisClass.getMethod("getIrisConfig").invoke(null);
+            if (irisConfig == null) {
+                return;
+            }
+            Class<?> configClass = irisConfig.getClass();
+            configClass.getMethod("setShaderPackName", String.class).invoke(irisConfig, shaderPackFilename);
+            configClass.getMethod("setShadersEnabled", boolean.class).invoke(irisConfig, true);
+            configClass.getMethod("save").invoke(irisConfig);
+            irisClass.getMethod("reload").invoke(null);
+        } catch (ClassNotFoundException ignored) {
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            LOGGER.warn("Nem sikerült futás közben alkalmazni az Iris shader beállításait.", e);
+        }
     }
 
     private static Method getCurrentServerEntryMethod() {

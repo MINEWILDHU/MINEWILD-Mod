@@ -103,14 +103,14 @@ public final class ShaderPackInstaller {
         return outdatedShaderDetected;
     }
 
-    public static void applyUserPreference(boolean enabled) {
+    public static String applyUserPreference(boolean enabled) {
         storeShaderEnabledChoice(enabled);
         startInstallWorker();
         if (enabled) {
-            applyPreferredInstalledShaderSettings();
-            return;
+            return applyPreferredInstalledShaderSettings();
         }
         applyIrisDisabledSettings();
+        return null;
     }
 
     public static void requestOutdatedShaderDeletion() {
@@ -351,10 +351,11 @@ public final class ShaderPackInstaller {
         }
     }
 
-    private static void applyPreferredInstalledShaderSettings() {
+    private static String applyPreferredInstalledShaderSettings() {
         Path shaderpacksDir = FabricLoader.getInstance().getGameDir().resolve(SHADERPACK_DIR);
         String desired = resolveDesiredShaderPack(shaderpacksDir, null);
         applyPreferenceForShaderPack(shaderpacksDir, desired);
+        return desired;
     }
 
     private static String resolveDesiredShaderPack(Path shaderpacksDir, String fallbackShaderPackFilename) {
@@ -390,6 +391,7 @@ public final class ShaderPackInstaller {
         if (isEuphoriaShaderPackName(shaderPackFilename)) {
             applyPopularProfileDefaults(shaderpacksDir, shaderPackFilename);
         }
+        requestIrisShaderLoadWhenPossible12111();
     }
 
     private static String waitForPreferredShaderPack(Path shaderpacksDir, String baseShaderFilename) {
@@ -666,6 +668,19 @@ public final class ShaderPackInstaller {
             properties.store(out, "Minewild Iris alapértelmezett beállítások");
         } catch (IOException e) {
             LOGGER.warn("Nem sikerült menteni az Iris beállításait: {}", irisProperties, e);
+        }
+    }
+
+    private static void requestIrisShaderLoadWhenPossible12111() {
+        if (!"1.21.11".equals(GAME_VERSION)) {
+            return;
+        }
+        try {
+            Class<?> irisClass = Class.forName("net.irisshaders.iris.Iris");
+            irisClass.getMethod("loadShaderpackWhenPossible").invoke(null);
+        } catch (ClassNotFoundException ignored) {
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            LOGGER.warn("Nem sikerült kérni az Iris shader újratöltését.", e);
         }
     }
 
